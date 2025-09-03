@@ -16,6 +16,7 @@ import (
 	"github.com/alexferrari88/sbstck-dl/lib"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test command execution in isolation
@@ -206,6 +207,18 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.Flags().Lookup("output"))
 		assert.NotNil(t, cmd.Flags().Lookup("dry-run"))
 		assert.NotNil(t, cmd.Flags().Lookup("add-source-url"))
+		assert.NotNil(t, cmd.Flags().Lookup("download-images"))
+		assert.NotNil(t, cmd.Flags().Lookup("image-quality"))
+		assert.NotNil(t, cmd.Flags().Lookup("images-dir"))
+		assert.NotNil(t, cmd.Flags().Lookup("download-files"))
+		assert.NotNil(t, cmd.Flags().Lookup("file-extensions"))
+		assert.NotNil(t, cmd.Flags().Lookup("files-dir"))
+		assert.NotNil(t, cmd.Flags().Lookup("create-archive"))
+		
+		// Test create-archive flag specifically
+		createArchiveFlag := cmd.Flags().Lookup("create-archive")
+		assert.Equal(t, "bool", createArchiveFlag.Value.Type())
+		assert.Equal(t, "false", createArchiveFlag.DefValue)
 	})
 
 	t.Run("list command flags", func(t *testing.T) {
@@ -384,5 +397,209 @@ func TestRealWorldScenarios(t *testing.T) {
 		}
 		
 		assert.Less(t, duration, 1*time.Second) // Should be fast
+	})
+}
+
+// Test archive functionality end-to-end
+func TestArchiveWorkflow(t *testing.T) {
+	t.Run("single post with archive", func(t *testing.T) {
+		tempDir := t.TempDir()
+		
+		// Create a mock post with enhanced fields
+		post := lib.Post{
+			Id:           123,
+			Title:        "Test Archive Post",
+			Slug:         "test-archive-post",
+			PostDate:     "2023-01-01T10:30:00Z",
+			Subtitle:     "This is a test subtitle",
+			Description:  "Test description",
+			CoverImage:   "https://example.com/cover.jpg",
+			CanonicalUrl: "https://example.substack.com/p/test-archive-post",
+			BodyHTML:     "<p>This is a <strong>test</strong> post for archive functionality.</p>",
+		}
+		
+		// Simulate the archive workflow
+		archive := lib.NewArchive()
+		
+		// Write the post to file (similar to what download command does)
+		filePath := filepath.Join(tempDir, "20230101_103000_test-archive-post.html")
+		err := post.WriteToFile(filePath, "html", false)
+		require.NoError(t, err)
+		
+		// Add entry to archive (similar to what download command does)
+		downloadTime, _ := time.Parse(time.RFC3339, "2023-01-10T12:00:00Z")
+		archive.AddEntry(post, filePath, downloadTime)
+		
+		// Generate archive in all formats
+		err = archive.GenerateHTML(tempDir)
+		require.NoError(t, err)
+		
+		err = archive.GenerateMarkdown(tempDir)
+		require.NoError(t, err)
+		
+		err = archive.GenerateText(tempDir)
+		require.NoError(t, err)
+		
+		// Verify all archive files were created
+		assert.FileExists(t, filepath.Join(tempDir, "index.html"))
+		assert.FileExists(t, filepath.Join(tempDir, "index.md"))
+		assert.FileExists(t, filepath.Join(tempDir, "index.txt"))
+		
+		// Verify HTML archive content
+		htmlContent, err := os.ReadFile(filepath.Join(tempDir, "index.html"))
+		require.NoError(t, err)
+		htmlStr := string(htmlContent)
+		
+		assert.Contains(t, htmlStr, "Test Archive Post")
+		assert.Contains(t, htmlStr, "This is a test subtitle")
+		assert.Contains(t, htmlStr, "https://example.com/cover.jpg")
+		assert.Contains(t, htmlStr, "20230101_103000_test-archive-post.html") // Relative path
+		assert.Contains(t, htmlStr, "January 1, 2023") // Formatted date
+		
+		// Verify Markdown archive content
+		mdContent, err := os.ReadFile(filepath.Join(tempDir, "index.md"))
+		require.NoError(t, err)
+		mdStr := string(mdContent)
+		
+		assert.Contains(t, mdStr, "# Substack Archive")
+		assert.Contains(t, mdStr, "## [Test Archive Post](20230101_103000_test-archive-post.html)")
+		assert.Contains(t, mdStr, "*This is a test subtitle*")
+		assert.Contains(t, mdStr, "![Cover Image](https://example.com/cover.jpg)")
+		
+		// Verify Text archive content
+		txtContent, err := os.ReadFile(filepath.Join(tempDir, "index.txt"))
+		require.NoError(t, err)
+		txtStr := string(txtContent)
+		
+		assert.Contains(t, txtStr, "SUBSTACK ARCHIVE")
+		assert.Contains(t, txtStr, "Title: Test Archive Post")
+		assert.Contains(t, txtStr, "File: 20230101_103000_test-archive-post.html")
+		assert.Contains(t, txtStr, "Description: This is a test subtitle")
+	})
+
+	t.Run("multiple posts with archive", func(t *testing.T) {
+		tempDir := t.TempDir()
+		
+		archive := lib.NewArchive()
+		downloadTime := time.Now()
+		
+		// Create multiple posts with different dates
+		posts := []lib.Post{
+			{
+				Id:           1,
+				Title:        "First Post",
+				Slug:         "first-post",
+				PostDate:     "2023-01-01T10:00:00Z",
+				Subtitle:     "First subtitle",
+				CanonicalUrl: "https://example.substack.com/p/first-post",
+				BodyHTML:     "<p>First post content</p>",
+			},
+			{
+				Id:           2,
+				Title:        "Second Post",
+				Slug:         "second-post", 
+				PostDate:     "2023-01-02T10:00:00Z",
+				Description:  "Second description",
+				CoverImage:   "https://example.com/cover2.jpg",
+				CanonicalUrl: "https://example.substack.com/p/second-post",
+				BodyHTML:     "<p>Second post content</p>",
+			},
+			{
+				Id:           3,
+				Title:        "Third Post",
+				Slug:         "third-post",
+				PostDate:     "2023-01-03T10:00:00Z",
+				Subtitle:     "Third subtitle",
+				CanonicalUrl: "https://example.substack.com/p/third-post",
+				BodyHTML:     "<p>Third post content</p>",
+			},
+		}
+		
+		// Write posts and add to archive
+		for i, post := range posts {
+			filePath := filepath.Join(tempDir, fmt.Sprintf("post-%d.html", i+1))
+			err := post.WriteToFile(filePath, "html", false)
+			require.NoError(t, err)
+			
+			archive.AddEntry(post, filePath, downloadTime.Add(time.Duration(i)*time.Hour))
+		}
+		
+		// Generate archive
+		err := archive.GenerateHTML(tempDir)
+		require.NoError(t, err)
+		
+		// Verify content ordering (newest first)
+		htmlContent, err := os.ReadFile(filepath.Join(tempDir, "index.html"))
+		require.NoError(t, err)
+		htmlStr := string(htmlContent)
+		
+		// Find positions of post titles to verify ordering
+		thirdPos := strings.Index(htmlStr, "Third Post")
+		secondPos := strings.Index(htmlStr, "Second Post")
+		firstPos := strings.Index(htmlStr, "First Post")
+		
+		assert.True(t, thirdPos < secondPos, "Third Post should appear before Second Post")
+		assert.True(t, secondPos < firstPos, "Second Post should appear before First Post")
+		
+		// Verify all posts are included
+		assert.Contains(t, htmlStr, "First subtitle")
+		assert.Contains(t, htmlStr, "Second description") // Fallback to description
+		assert.Contains(t, htmlStr, "Third subtitle")
+		assert.Contains(t, htmlStr, "https://example.com/cover2.jpg")
+	})
+
+	t.Run("archive with different formats", func(t *testing.T) {
+		tempDir := t.TempDir()
+		
+		post := lib.Post{
+			Id:           100,
+			Title:        "Format Test Post",
+			Slug:         "format-test-post",
+			PostDate:     "2023-01-01T10:00:00Z",
+			Subtitle:     "Testing different formats",
+			CanonicalUrl: "https://example.substack.com/p/format-test-post",
+			BodyHTML:     "<p>Testing <strong>different</strong> formats.</p>",
+		}
+		
+		// Test with different output formats
+		formats := []string{"html", "md", "txt"}
+		
+		for _, format := range formats {
+			t.Run(fmt.Sprintf("format_%s", format), func(t *testing.T) {
+				formatDir := filepath.Join(tempDir, format)
+				err := os.MkdirAll(formatDir, 0755)
+				require.NoError(t, err)
+				
+				archive := lib.NewArchive()
+				
+				// Write post in the specified format
+				filePath := filepath.Join(formatDir, fmt.Sprintf("post.%s", format))
+				err = post.WriteToFile(filePath, format, false)
+				require.NoError(t, err)
+				
+				// Add to archive and generate
+				archive.AddEntry(post, filePath, time.Now())
+				
+				switch format {
+				case "html":
+					err = archive.GenerateHTML(formatDir)
+				case "md":
+					err = archive.GenerateMarkdown(formatDir)
+				case "txt":
+					err = archive.GenerateText(formatDir)
+				}
+				require.NoError(t, err)
+				
+				// Verify archive file exists
+				indexPath := filepath.Join(formatDir, fmt.Sprintf("index.%s", format))
+				assert.FileExists(t, indexPath)
+				
+				// Verify content contains the post
+				content, err := os.ReadFile(indexPath)
+				require.NoError(t, err)
+				assert.Contains(t, string(content), "Format Test Post")
+				assert.Contains(t, string(content), "Testing different formats")
+			})
+		}
 	})
 }

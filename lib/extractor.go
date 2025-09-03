@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
@@ -43,6 +45,7 @@ type Post struct {
 	NextPostSlug     string `json:"next_post_slug"`
 	CoverImage       string `json:"cover_image"`
 	Description      string `json:"description"`
+	Subtitle         string `json:"subtitle,omitempty"`
 	WordCount        int    `json:"wordcount"`
 	Title            string `json:"title"`
 	BodyHTML         string `json:"body_html"`
@@ -266,6 +269,18 @@ type Extractor struct {
 	fetcher *Fetcher
 }
 
+// ArchiveEntry represents a single entry in the archive page
+type ArchiveEntry struct {
+	Post         Post
+	FilePath     string
+	DownloadTime time.Time
+}
+
+// Archive represents a collection of posts for the archive page
+type Archive struct {
+	Entries []ArchiveEntry
+}
+
 // NewExtractor creates a new Extractor with the provided Fetcher.
 // If the Fetcher is nil, a default Fetcher will be used.
 func NewExtractor(f *Fetcher) *Extractor {
@@ -338,6 +353,19 @@ func (e *Extractor) ExtractPost(ctx context.Context, pageUrl string) (Post, erro
 	p, err := rawJSON.ToPost()
 	if err != nil {
 		return Post{}, fmt.Errorf("failed to parse post data: %w", err)
+	}
+
+	// Extract additional metadata from HTML
+	// Extract subtitle from .subtitle element
+	if subtitle := doc.Find(".subtitle").First().Text(); subtitle != "" {
+		p.Subtitle = strings.TrimSpace(subtitle)
+	}
+
+	// Extract cover image from og:image meta tag if not already set
+	if p.CoverImage == "" {
+		if ogImage, exists := doc.Find("meta[property='og:image']").Attr("content"); exists && ogImage != "" {
+			p.CoverImage = ogImage
+		}
 	}
 
 	return p, nil
@@ -457,4 +485,192 @@ func (e *Extractor) ExtractAllPosts(ctx context.Context, urls []string) <-chan E
 	}()
 
 	return resultCh
+}
+
+// NewArchive creates a new Archive instance
+func NewArchive() *Archive {
+	return &Archive{
+		Entries: make([]ArchiveEntry, 0),
+	}
+}
+
+// AddEntry adds a new entry to the archive, sorted by publication date (newest first)
+func (a *Archive) AddEntry(post Post, filePath string, downloadTime time.Time) {
+	entry := ArchiveEntry{
+		Post:         post,
+		FilePath:     filePath,
+		DownloadTime: downloadTime,
+	}
+	
+	a.Entries = append(a.Entries, entry)
+	a.sortEntries()
+}
+
+// sortEntries sorts archive entries by publication date (newest first)
+func (a *Archive) sortEntries() {
+	sort.Slice(a.Entries, func(i, j int) bool {
+		// Parse post dates and compare (newest first)
+		dateI, errI := time.Parse(time.RFC3339, a.Entries[i].Post.PostDate)
+		dateJ, errJ := time.Parse(time.RFC3339, a.Entries[j].Post.PostDate)
+		
+		if errI != nil || errJ != nil {
+			// If parsing fails, sort by title
+			return a.Entries[i].Post.Title < a.Entries[j].Post.Title
+		}
+		
+		return dateI.After(dateJ) // newest first
+	})
+}
+
+// GenerateHTML creates an HTML archive page
+func (a *Archive) GenerateHTML(outputDir string) error {
+	archivePath := filepath.Join(outputDir, "index.html")
+	
+	html := `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Substack Archive</title>
+	<style>
+		body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+		h1 { color: #333; }
+		.post { margin-bottom: 30px; padding: 20px; border: 1px solid #eee; border-radius: 8px; }
+		.post h2 { margin-top: 0; }
+		.post h2 a { text-decoration: none; color: #ff6719; }
+		.post h2 a:hover { text-decoration: underline; }
+		.meta { color: #666; font-size: 14px; margin-bottom: 10px; }
+		.subtitle { color: #777; font-style: italic; margin-bottom: 10px; }
+		.cover-image { max-width: 200px; float: right; margin-left: 15px; }
+	</style>
+</head>
+<body>
+	<h1>Substack Archive</h1>
+`
+
+	for _, entry := range a.Entries {
+		// Make file path relative from archive directory
+		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
+		
+		// Format publication date
+		pubDate := entry.Post.PostDate
+		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
+			pubDate = parsedDate.Format("January 2, 2006")
+		}
+		
+		// Format download date
+		downloadDate := entry.DownloadTime.Format("January 2, 2006 15:04")
+		
+		html += `	<div class="post">
+`
+		
+		// Add cover image if available
+		if entry.Post.CoverImage != "" {
+			html += fmt.Sprintf(`		<img src="%s" alt="Cover" class="cover-image">
+`, entry.Post.CoverImage)
+		}
+		
+		html += fmt.Sprintf(`		<h2><a href="%s">%s</a></h2>
+		<div class="meta">Published: %s | Downloaded: %s</div>
+`, relPath, entry.Post.Title, pubDate, downloadDate)
+		
+		// Add subtitle/description
+		description := entry.Post.Subtitle
+		if description == "" {
+			description = entry.Post.Description
+		}
+		if description != "" {
+			html += fmt.Sprintf(`		<div class="subtitle">%s</div>
+`, description)
+		}
+		
+		html += `	</div>
+`
+	}
+	
+	html += `</body>
+</html>`
+	
+	return os.WriteFile(archivePath, []byte(html), 0644)
+}
+
+// GenerateMarkdown creates a Markdown archive page
+func (a *Archive) GenerateMarkdown(outputDir string) error {
+	archivePath := filepath.Join(outputDir, "index.md")
+	
+	content := "# Substack Archive\n\n"
+	
+	for _, entry := range a.Entries {
+		// Make file path relative from archive directory
+		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
+		
+		// Format publication date
+		pubDate := entry.Post.PostDate
+		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
+			pubDate = parsedDate.Format("January 2, 2006")
+		}
+		
+		// Format download date
+		downloadDate := entry.DownloadTime.Format("January 2, 2006 15:04")
+		
+		content += fmt.Sprintf("## [%s](%s)\n\n", entry.Post.Title, relPath)
+		content += fmt.Sprintf("**Published:** %s | **Downloaded:** %s\n\n", pubDate, downloadDate)
+		
+		// Add cover image if available
+		if entry.Post.CoverImage != "" {
+			content += fmt.Sprintf("![Cover Image](%s)\n\n", entry.Post.CoverImage)
+		}
+		
+		// Add subtitle/description
+		description := entry.Post.Subtitle
+		if description == "" {
+			description = entry.Post.Description
+		}
+		if description != "" {
+			content += fmt.Sprintf("*%s*\n\n", description)
+		}
+		
+		content += "---\n\n"
+	}
+	
+	return os.WriteFile(archivePath, []byte(content), 0644)
+}
+
+// GenerateText creates a plain text archive page
+func (a *Archive) GenerateText(outputDir string) error {
+	archivePath := filepath.Join(outputDir, "index.txt")
+	
+	content := "SUBSTACK ARCHIVE\n================\n\n"
+	
+	for _, entry := range a.Entries {
+		// Make file path relative from archive directory
+		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
+		
+		// Format publication date
+		pubDate := entry.Post.PostDate
+		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
+			pubDate = parsedDate.Format("January 2, 2006")
+		}
+		
+		// Format download date
+		downloadDate := entry.DownloadTime.Format("January 2, 2006 15:04")
+		
+		content += fmt.Sprintf("Title: %s\n", entry.Post.Title)
+		content += fmt.Sprintf("File: %s\n", relPath)
+		content += fmt.Sprintf("Published: %s\n", pubDate)
+		content += fmt.Sprintf("Downloaded: %s\n", downloadDate)
+		
+		// Add subtitle/description
+		description := entry.Post.Subtitle
+		if description == "" {
+			description = entry.Post.Description
+		}
+		if description != "" {
+			content += fmt.Sprintf("Description: %s\n", description)
+		}
+		
+		content += "\n" + strings.Repeat("-", 50) + "\n\n"
+	}
+	
+	return os.WriteFile(archivePath, []byte(content), 0644)
 }

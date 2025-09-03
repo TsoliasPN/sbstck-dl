@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-This is a Go CLI tool for downloading posts from Substack blogs. It supports downloading individual posts or entire archives, with features for private newsletters (via cookies), rate limiting, format conversion (HTML/Markdown/Text), and downloading of images and file attachments locally.
+This is a Go CLI tool for downloading posts from Substack blogs. It supports downloading individual posts or entire archives, with features for private newsletters (via cookies), rate limiting, format conversion (HTML/Markdown/Text), downloading of images and file attachments locally, and creating archive index pages that link all downloaded posts with their metadata.
 
 ## Architecture
 The project follows a standard Go CLI structure:
@@ -49,8 +49,11 @@ go mod download
 
 ### Extractor (`lib/extractor.go`)
 - Parses Substack post JSON from HTML
+- Extracts post metadata including subtitle (.subtitle CSS selector) and cover image (og:image meta tag)
 - Converts HTML to Markdown/Text using external libraries
 - Handles file writing with different formats
+- Provides archive page generation functionality (HTML/Markdown/Text formats)
+- Manages archive entries with automatic sorting by publication date (newest first)
 
 ### Image Downloader (`lib/images.go`)
 - Downloads images locally from Substack posts
@@ -66,6 +69,15 @@ go mod download
 - Updates HTML content to reference local file paths
 - Handles filename sanitization and collision avoidance
 - Integrates with existing image download workflow
+
+### Archive Page Generator (`lib/extractor.go`)
+- Creates index pages linking all downloaded posts with metadata
+- Supports HTML, Markdown, and Text formats matching the selected output format
+- Includes post titles (linked to downloaded files with relative paths)
+- Shows publication dates and download timestamps
+- Displays post descriptions/subtitles and cover images when available
+- Automatically sorts posts by publication date (newest first)
+- Generates `index.{format}` in the output directory root
 
 ### Commands Structure
 Uses Cobra framework:
@@ -118,6 +130,24 @@ go run . download --url https://example.substack.com --download-files --files-di
 
 # Download single post with both images and file attachments
 go run . download --url https://example.substack.com/p/post-title --download-images --download-files --output ./downloads
+```
+
+### Creating archive index pages
+```bash
+# Download posts and create an archive index page
+go run . download --url https://example.substack.com --create-archive --output ./downloads
+
+# Download entire archive with archive index in markdown format
+go run . download --url https://example.substack.com --create-archive --format md --output ./downloads
+
+# Download single post with archive page (useful for building up an archive over time)
+go run . download --url https://example.substack.com/p/post-title --create-archive --output ./downloads
+
+# Download with all features: images, files, and archive page
+go run . download --url https://example.substack.com --download-images --download-files --create-archive --output ./downloads
+
+# Download archive with specific format and custom directories
+go run . download --url https://example.substack.com --create-archive --format html --images-dir assets --files-dir attachments --output ./downloads
 ```
 
 ### Building for release

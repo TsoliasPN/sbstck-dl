@@ -60,6 +60,7 @@ Usage:
 
 Flags:
       --add-source-url         Add the original post URL at the end of the downloaded file
+      --create-archive         Create an archive index page linking all downloaded posts
       --download-files         Download file attachments locally and update content to reference local files
       --download-images        Download images locally and update content to reference local files
   -d, --dry-run                Enable dry run
@@ -181,6 +182,68 @@ output/
         └── presentation.pptx
 ```
 
+#### Creating Archive Index Pages
+
+Use the `--create-archive` flag to generate an organized index page that links all downloaded posts with their metadata. This creates a beautiful overview of your downloaded content, making it easy to browse and access your Substack archive.
+
+**Features:**
+- Creates `index.{format}` file matching your selected output format (HTML/Markdown/Text)
+- Links to all downloaded posts using relative file paths
+- Displays post titles, publication dates, and download timestamps
+- Shows post descriptions/subtitles and cover images when available
+- Automatically sorts posts by publication date (newest first)
+- Works with both single post and bulk downloads
+
+**Examples:**
+
+```bash
+# Download entire archive and create index page
+sbstck-dl download --url https://example.substack.com --create-archive
+
+# Create archive index in Markdown format
+sbstck-dl download --url https://example.substack.com --create-archive --format md
+
+# Build archive over time with single posts
+sbstck-dl download --url https://example.substack.com/p/post-title --create-archive
+
+# Complete download with all features
+sbstck-dl download --url https://example.substack.com --download-images --download-files --create-archive
+
+# Custom directory structure with archive
+sbstck-dl download --url https://example.substack.com --create-archive --images-dir assets --files-dir attachments
+```
+
+**Archive Content Per Post:**
+- **Title**: Clickable link to the downloaded post file
+- **Publication Date**: When the post was originally published on Substack
+- **Download Date**: When you downloaded the post locally  
+- **Description**: Post subtitle or description (when available)
+- **Cover Image**: Featured image from the post (when available)
+
+**Archive Format Examples:**
+
+*HTML Format:* Styled webpage with images, organized post cards, and hover effects
+*Markdown Format:* Clean markdown with headers, links, and image references
+*Text Format:* Plain text listing with all metadata for maximum compatibility
+
+**Directory Structure with Archive:**
+```
+output/
+├── index.html                     # Archive index page
+├── 20231201_120000_post-title.html
+├── 20231115_090000_another-post.html
+├── images/
+│   ├── post-title/
+│   │   └── image1_1456x819.jpeg
+│   └── another-post/
+│       └── image2_848x636.png
+└── files/
+    ├── post-title/
+    │   └── document.pdf
+    └── another-post/
+        └── spreadsheet.xlsx
+```
+
 ### Listing posts
 
 ```bash
@@ -223,6 +286,8 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 - [x] Improve retry logic
 - [ ] Implement loading from config file
 - [x] Add support for downloading images
+- [x] Add support for downloading file attachments
+- [x] Add archive index page functionality
 - [x] Add tests
 - [x] Add CI
 - [x] Add documentation

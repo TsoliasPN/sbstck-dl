@@ -25,6 +25,7 @@ type rerunRequest struct {
 	CookieVal      string `json:"cookie_val"`
 	CookieValFile  string `json:"cookie_val_file"`
 	CookieJar      string `json:"cookie_jar"`
+	CookieKeychain string `json:"cookie_keychain"`
 }
 
 type rerunResponse struct {
@@ -85,10 +86,11 @@ func serveRerun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie, cookieErrors := resolveTestCookie(testConnectionRequest{
-		CookieName:    req.CookieName,
-		CookieVal:     req.CookieVal,
-		CookieValFile: req.CookieValFile,
-		CookieJar:     req.CookieJar,
+		CookieName:     req.CookieName,
+		CookieVal:      req.CookieVal,
+		CookieValFile:  req.CookieValFile,
+		CookieJar:      req.CookieJar,
+		CookieKeychain: req.CookieKeychain,
 	}, domainHint)
 	errorsList = append(errorsList, cookieErrors...)
 

@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoadConfigJSON(t *testing.T) {
-	data := `{"url":"https://example.substack.com","rate":5,"dry_run":true,"cookie_name":"substack.sid"}`
+	data := `{"url":"https://example.substack.com","rate":5,"dry_run":true,"cookie_name":"substack.sid","cookie_keychain":"my-cookie"}`
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -30,6 +30,9 @@ func TestLoadConfigJSON(t *testing.T) {
 	}
 	if cfg.CookieName == nil || *cfg.CookieName != "substack.sid" {
 		t.Fatalf("unexpected cookie_name: %#v", cfg.CookieName)
+	}
+	if cfg.CookieKeychain == nil || *cfg.CookieKeychain != "my-cookie" {
+		t.Fatalf("unexpected cookie_keychain: %#v", cfg.CookieKeychain)
 	}
 }
 
@@ -56,15 +59,17 @@ func TestApplyConfigToCommand(t *testing.T) {
 	cmd := &cobra.Command{}
 	var cn cookieName
 	cmd.Flags().Var(&cn, "cookie_name", "")
+	cmd.Flags().String("cookie-keychain", "", "")
 	cmd.Flags().String("url", "", "")
 	cmd.Flags().Int("rate", 2, "")
 	cmd.Flags().Bool("dry-run", false, "")
 
 	cfg := &Config{
-		URL:        strPtr("https://example.substack.com"),
-		Rate:       intPtr(5),
-		DryRun:     boolPtr(true),
-		CookieName: strPtr("substack.sid"),
+		URL:            strPtr("https://example.substack.com"),
+		Rate:           intPtr(5),
+		DryRun:         boolPtr(true),
+		CookieName:     strPtr("substack.sid"),
+		CookieKeychain: strPtr("my-cookie"),
 	}
 	if err := applyConfigToCommand(cmd, cfg); err != nil {
 		t.Fatalf("apply config: %v", err)
@@ -84,6 +89,10 @@ func TestApplyConfigToCommand(t *testing.T) {
 	}
 	if cn.String() != "substack.sid" {
 		t.Fatalf("unexpected cookie name: %s", cn.String())
+	}
+	keychainValue, _ := cmd.Flags().GetString("cookie-keychain")
+	if keychainValue != "my-cookie" {
+		t.Fatalf("unexpected cookie keychain: %s", keychainValue)
 	}
 }
 

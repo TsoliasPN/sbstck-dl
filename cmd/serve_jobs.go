@@ -94,6 +94,7 @@ type jobStartRequest struct {
 	CookieVal      string `json:"cookie_val"`
 	CookieValFile  string `json:"cookie_val_file"`
 	CookieJar      string `json:"cookie_jar"`
+	CookieKeychain string `json:"cookie_keychain"`
 	NotionLabels   string `json:"notion_labels"`
 	Verbose        bool   `json:"verbose"`
 }
@@ -489,10 +490,11 @@ func applyJobConfig(req jobStartRequest, job *downloadJob) error {
 		domainHint = parsedURL.Hostname()
 	}
 	cookie, cookieErrors := resolveTestCookie(testConnectionRequest{
-		CookieName:    req.CookieName,
-		CookieVal:     req.CookieVal,
-		CookieValFile: req.CookieValFile,
-		CookieJar:     req.CookieJar,
+		CookieName:     req.CookieName,
+		CookieVal:      req.CookieVal,
+		CookieValFile:  req.CookieValFile,
+		CookieJar:      req.CookieJar,
+		CookieKeychain: req.CookieKeychain,
 	}, domainHint)
 	if len(cookieErrors) > 0 {
 		return errors.New(strings.Join(cookieErrors, " | "))

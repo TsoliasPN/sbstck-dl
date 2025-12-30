@@ -54,6 +54,7 @@ var (
 	idCookieVal      string
 	cookieValFile    string
 	cookieJarPath    string
+	cookieKeychain   string
 	notionLabelsPath string
 	configPath       string
 	ctx              = context.Background()
@@ -101,6 +102,14 @@ var (
 			idCookieVal, err = resolveCookieValue(idCookieVal, cookieValFile)
 			if err != nil {
 				log.Fatalf("failed to resolve cookie value: %v", err)
+			}
+
+			if idCookieVal == "" && cookieKeychain != "" {
+				value, err := secretStore.Get(cookieKeychain)
+				if err != nil {
+					log.Fatalf("failed to read cookie from keychain: %v", err)
+				}
+				idCookieVal = value
 			}
 
 			domainHint := extractDomainHint(cmd)
@@ -162,6 +171,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&idCookieVal, "cookie_val", "", "The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)")
 	rootCmd.PersistentFlags().StringVar(&cookieValFile, "cookie-val-file", "", "Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)")
 	rootCmd.PersistentFlags().StringVar(&cookieJarPath, "cookie-jar", "", "Read cookies from a Netscape cookie jar file (cookies.txt)")
+	rootCmd.PersistentFlags().StringVar(&cookieKeychain, "cookie-keychain", "", "Read cookie value from OS keychain/credential manager")
 	rootCmd.PersistentFlags().StringVar(&notionLabelsPath, "notion-labels", "", "Path to a YAML/JSON map of Notion URL to label for notion-links output")
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Load options from a YAML/JSON config file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")

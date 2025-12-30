@@ -85,6 +85,11 @@ type rerunResponsePayload struct {
 	Errors   []string `json:"errors"`
 }
 
+type secretResponsePayload struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+}
+
 func TestServeTestConnectionSuccess(t *testing.T) {
 	setTestCSRFToken()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -304,6 +309,46 @@ func TestServeRerunNewPosts(t *testing.T) {
 	}
 	if resp.LastRun == "" {
 		t.Fatalf("expected last_run to be set")
+	}
+}
+
+func TestServeSecretStore(t *testing.T) {
+	setTestCSRFToken()
+	restore := setSecretStoreForTest(newMemorySecretStore())
+	defer restore()
+
+	payload := map[string]string{
+		"key":        "test-cookie",
+		"cookie_val": "token",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/secret", bytes.NewReader(data))
+	addCSRFHeader(req)
+	rec := httptest.NewRecorder()
+	serveUIHandler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp secretResponsePayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected ok response, got %+v", resp)
+	}
+
+	value, err := secretStore.Get("test-cookie")
+	if err != nil {
+		t.Fatalf("read secret: %v", err)
+	}
+	if value != "token" {
+		t.Fatalf("unexpected secret value: %s", value)
 	}
 }
 

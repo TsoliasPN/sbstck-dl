@@ -44,6 +44,7 @@ var (
 	proxyURL       string
 	verbose        bool
 	ratePerSecond  int
+	maxWorkers     int
 	beforeDate     string
 	afterDate      string
 	idCookieName   cookieName
@@ -72,6 +73,9 @@ var (
 			if ratePerSecond == 0 {
 				log.Fatal("rate must be greater than 0")
 			}
+			if maxWorkers <= 0 {
+				log.Fatal("max-workers must be greater than 0")
+			}
 
 			if idCookieVal != "" && idCookieName != "" {
 				if idCookieName == substackSid {
@@ -87,7 +91,12 @@ var (
 				}
 			}
 
-			fetcher = lib.NewFetcher(lib.WithRatePerSecond(ratePerSecond), lib.WithProxyURL(parsedProxyURL), lib.WithCookie(cookie))
+			fetcher = lib.NewFetcher(
+				lib.WithRatePerSecond(ratePerSecond),
+				lib.WithMaxWorkers(maxWorkers),
+				lib.WithProxyURL(parsedProxyURL),
+				lib.WithCookie(cookie),
+			)
 			extractor = lib.NewExtractor(fetcher)
 		},
 	}
@@ -110,6 +119,8 @@ func init() {
 	rootCmd.PersistentFlags().IntVarP(&ratePerSecond, "rate", "r", lib.DefaultRatePerSecond, "Specify the rate of requests per second")
 	rootCmd.PersistentFlags().StringVar(&beforeDate, "before", "", "Download posts published before this date (format: YYYY-MM-DD)")
 	rootCmd.PersistentFlags().StringVar(&afterDate, "after", "", "Download posts published after this date (format: YYYY-MM-DD)")
+	rootCmd.PersistentFlags().IntVar(&maxWorkers, "max-workers", lib.DefaultMaxWorkers, "Maximum parallel workers for downloading posts (rate limiting still applies)")
+	rootCmd.PersistentFlags().IntVar(&maxWorkers, "concurrency", lib.DefaultMaxWorkers, "Alias for --max-workers")
 	rootCmd.MarkFlagsRequiredTogether("cookie_name", "cookie_val")
 
 	rootCmd.AddCommand(downloadCmd)

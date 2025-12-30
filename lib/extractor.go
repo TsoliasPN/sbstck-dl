@@ -133,10 +133,10 @@ func (p *Post) WriteToFile(path string, format string, addSourceURL bool) error 
 }
 
 // WriteToFileWithImages writes the Post's content to a file with optional image downloading
-func (p *Post) WriteToFileWithImages(ctx context.Context, path string, format string, addSourceURL bool, 
-	downloadImages bool, imageQuality ImageQuality, imagesDir string, 
+func (p *Post) WriteToFileWithImages(ctx context.Context, path string, format string, addSourceURL bool,
+	downloadImages bool, imageQuality ImageQuality, imagesDir string,
 	downloadFiles bool, fileExtensions []string, filesDir string, fetcher *Fetcher) (*ImageDownloadResult, error) {
-	
+
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, err
 	}
@@ -152,14 +152,14 @@ func (p *Post) WriteToFileWithImages(ctx context.Context, path string, format st
 	if downloadImages && (format == "html" || format == "md") {
 		outputDir := filepath.Dir(path)
 		imageDownloader := NewImageDownloader(fetcher, outputDir, imagesDir, imageQuality)
-		
+
 		// Only process HTML content for image downloading
 		htmlContent := content
 		if format == "md" {
 			// For markdown, we need to work with the original HTML
 			htmlContent = p.BodyHTML
 		}
-		
+
 		imageResult, err = imageDownloader.DownloadImages(ctx, htmlContent, p.Slug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download images: %w", err)
@@ -186,7 +186,7 @@ func (p *Post) WriteToFileWithImages(ctx context.Context, path string, format st
 		// For text format, we can't embed images, but we can still download them
 		outputDir := filepath.Dir(path)
 		imageDownloader := NewImageDownloader(fetcher, outputDir, imagesDir, imageQuality)
-		
+
 		imageResult, err = imageDownloader.DownloadImages(ctx, p.BodyHTML, p.Slug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download images: %w", err)
@@ -198,7 +198,7 @@ func (p *Post) WriteToFileWithImages(ctx context.Context, path string, format st
 	if downloadFiles && (format == "html" || format == "md") {
 		outputDir := filepath.Dir(path)
 		fileDownloader := NewFileDownloader(fetcher, outputDir, filesDir, fileExtensions)
-		
+
 		// Process HTML content for file downloading - use the updated HTML from images if available
 		htmlContent := content
 		if imageResult != nil && imageResult.UpdatedHTML != "" {
@@ -207,7 +207,7 @@ func (p *Post) WriteToFileWithImages(ctx context.Context, path string, format st
 			// For markdown, we need to work with the original HTML
 			htmlContent = p.BodyHTML
 		}
-		
+
 		fileResult, err := fileDownloader.DownloadFiles(ctx, htmlContent, p.Slug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download files: %w", err)
@@ -454,8 +454,11 @@ func (e *Extractor) ExtractAllPosts(ctx context.Context, urls []string) <-chan E
 		}
 		close(urlCh)
 
-		// Limit concurrency - the number of workers is capped at 10 or the number of URLs, whichever is smaller
+		// Limit concurrency - the number of workers is capped at configured max or the number of URLs, whichever is smaller
 		workerCount := 10
+		if e.fetcher != nil && e.fetcher.MaxWorkers > 0 {
+			workerCount = e.fetcher.MaxWorkers
+		}
 		if len(urls) < workerCount {
 			workerCount = len(urls)
 		}
@@ -503,7 +506,7 @@ func (a *Archive) AddEntry(post Post, filePath string, downloadTime time.Time) {
 		FilePath:     filePath,
 		DownloadTime: downloadTime,
 	}
-	
+
 	a.Entries = append(a.Entries, entry)
 	a.sortEntries()
 }
@@ -514,12 +517,12 @@ func (a *Archive) sortEntries() {
 		// Parse post dates and compare (newest first)
 		dateI, errI := time.Parse(time.RFC3339, a.Entries[i].Post.PostDate)
 		dateJ, errJ := time.Parse(time.RFC3339, a.Entries[j].Post.PostDate)
-		
+
 		if errI != nil || errJ != nil {
 			// If parsing fails, sort by title
 			return a.Entries[i].Post.Title < a.Entries[j].Post.Title
 		}
-		
+
 		return dateI.After(dateJ) // newest first
 	})
 }
@@ -1033,30 +1036,30 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 // GenerateMarkdown creates a Markdown archive page
 func (a *Archive) GenerateMarkdown(outputDir string) error {
 	archivePath := filepath.Join(outputDir, "index.md")
-	
+
 	content := "# Substack Archive\n\n"
-	
+
 	for _, entry := range a.Entries {
 		// Make file path relative from archive directory
 		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
-		
+
 		// Format publication date
 		pubDate := entry.Post.PostDate
 		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
 			pubDate = parsedDate.Format("January 2, 2006")
 		}
-		
+
 		// Format download date
 		downloadDate := entry.DownloadTime.Format("January 2, 2006 15:04")
-		
+
 		content += fmt.Sprintf("## [%s](%s)\n\n", entry.Post.Title, relPath)
 		content += fmt.Sprintf("**Published:** %s | **Downloaded:** %s\n\n", pubDate, downloadDate)
-		
+
 		// Add cover image if available
 		if entry.Post.CoverImage != "" {
 			content += fmt.Sprintf("![Cover Image](%s)\n\n", entry.Post.CoverImage)
 		}
-		
+
 		// Add subtitle/description
 		description := entry.Post.Subtitle
 		if description == "" {
@@ -1065,37 +1068,37 @@ func (a *Archive) GenerateMarkdown(outputDir string) error {
 		if description != "" {
 			content += fmt.Sprintf("*%s*\n\n", description)
 		}
-		
+
 		content += "---\n\n"
 	}
-	
+
 	return os.WriteFile(archivePath, []byte(content), 0644)
 }
 
 // GenerateText creates a plain text archive page
 func (a *Archive) GenerateText(outputDir string) error {
 	archivePath := filepath.Join(outputDir, "index.txt")
-	
+
 	content := "SUBSTACK ARCHIVE\n================\n\n"
-	
+
 	for _, entry := range a.Entries {
 		// Make file path relative from archive directory
 		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
-		
+
 		// Format publication date
 		pubDate := entry.Post.PostDate
 		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
 			pubDate = parsedDate.Format("January 2, 2006")
 		}
-		
+
 		// Format download date
 		downloadDate := entry.DownloadTime.Format("January 2, 2006 15:04")
-		
+
 		content += fmt.Sprintf("Title: %s\n", entry.Post.Title)
 		content += fmt.Sprintf("File: %s\n", relPath)
 		content += fmt.Sprintf("Published: %s\n", pubDate)
 		content += fmt.Sprintf("Downloaded: %s\n", downloadDate)
-		
+
 		// Add subtitle/description
 		description := entry.Post.Subtitle
 		if description == "" {
@@ -1104,9 +1107,9 @@ func (a *Archive) GenerateText(outputDir string) error {
 		if description != "" {
 			content += fmt.Sprintf("Description: %s\n", description)
 		}
-		
+
 		content += "\n" + strings.Repeat("-", 50) + "\n\n"
 	}
-	
+
 	return os.WriteFile(archivePath, []byte(content), 0644)
 }

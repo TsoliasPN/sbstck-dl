@@ -20,6 +20,9 @@ const DefaultRatePerSecond = 2
 // DefaultBurst defines the default burst size for the rate limiter.
 const DefaultBurst = 5
 
+// DefaultMaxWorkers defines the default maximum number of concurrent workers.
+const DefaultMaxWorkers = 10
+
 // defaultRetryAfter specifies the default value for Retry-After header in case of too many requests.
 const defaultRetryAfter = 60
 
@@ -141,7 +144,7 @@ func NewFetcher(opts ...FetcherOption) *Fetcher {
 		Burst:         DefaultBurst,
 		BackOffConfig: makeDefaultBackoff(),
 		Timeout:       defaultClientTimeout,
-		MaxWorkers:    10, // Default to 10 workers
+		MaxWorkers:    DefaultMaxWorkers,
 	}
 
 	for _, opt := range opts {

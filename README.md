@@ -367,6 +367,7 @@ Global Flags:
 ### Serving the UI
 
 The UI server binds to `127.0.0.1` only.
+It includes a step-by-step wizard with Basic and Advanced presets that map directly to CLI flags.
 
 ```bash
 Usage:
@@ -447,7 +448,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 
 #### P2 - UI (guided local web app)
 - [x] (P2) Add a `serve` (or `ui`) command that launches a local-only web UI (bind `127.0.0.1`) for guided runs
-- [ ] (P2) Build a step-by-step “wizard” flow with presets (Basic vs Advanced) that maps 1:1 to CLI flags
+- [x] (P2) Build a step-by-step “wizard” flow with presets (Basic vs Advanced) that maps 1:1 to CLI flags
 - [ ] (P2) Add inline help/tooltips and recommended defaults (format, images/files, rate limits) for non-technical users
 - [ ] (P2) Validate inputs in the UI (URL/proxy/date formats) and provide actionable error messages
 - [ ] (P2) Add a “Test connection” step (fetch `sitemap.xml`, verify cookie works for a known private post)

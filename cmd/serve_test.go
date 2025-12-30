@@ -19,7 +19,7 @@ func TestServeUIRoot(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
 		t.Fatalf("expected content-type text/html, got %q", ct)
 	}
-	if !strings.Contains(rec.Body.String(), "Substack Downloader UI") {
+	if !strings.Contains(rec.Body.String(), "Substack Downloader Wizard") {
 		t.Fatalf("expected UI content in response")
 	}
 }

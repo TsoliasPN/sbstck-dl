@@ -56,50 +56,230 @@ const serveHTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Substack Downloader UI</title>
+  <title>Substack Downloader Wizard</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #fef3c7;
+      --bg: #fdf6e3;
       --bg-2: #f8fafc;
       --card: #ffffff;
       --text: #0f172a;
       --muted: #475569;
       --accent: #f97316;
+      --accent-dark: #b45309;
       --border: #e2e8f0;
+      --ink: #1f2937;
     }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
-      background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg) 100%);
+      font-family: "Garamond", "Georgia", "Times New Roman", serif;
+      background: radial-gradient(circle at 20% 10%, #fff7ed 0%, rgba(255, 247, 237, 0) 45%),
+        linear-gradient(135deg, var(--bg-2) 0%, var(--bg) 100%);
       color: var(--text);
+      min-height: 100vh;
     }
-    .container {
-      max-width: 720px;
+    .scene {
+      max-width: 980px;
       margin: 0 auto;
-      padding: 32px 20px 40px;
+      padding: 28px 18px 48px;
     }
+    .hero {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      color: var(--accent-dark);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      width: fit-content;
+    }
+    h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; color: var(--ink); }
+    p { margin: 0; line-height: 1.5; color: var(--muted); }
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px;
-      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
-      animation: lift 480ms ease-out;
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+      animation: lift 500ms ease-out;
     }
-    h1 { margin: 0 0 8px; font-size: 22px; }
-    p { margin: 0 0 12px; line-height: 1.5; color: var(--muted); }
-    code {
-      display: inline-block;
+    .stepper {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .step-pill {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+      transition: 0.2s ease;
+      color: var(--muted);
+    }
+    .step-pill.active {
+      border-color: #fdba74;
       background: #fff7ed;
-      border: 1px solid #fed7aa;
-      border-radius: 6px;
-      padding: 2px 6px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .step-pill span {
+      display: block;
       font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent-dark);
+    }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+    .group {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .group:first-of-type {
+      border-top: none;
+      padding-top: 0;
+      margin-top: 0;
+    }
+    .group h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      color: var(--ink);
+    }
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    label.field {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    label.field input,
+    label.field select,
+    label.field textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: "Garamond", "Georgia", "Times New Roman", serif;
+      color: var(--ink);
+      background: #ffffff;
+    }
+    label.field input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
+    .flag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 11px;
+      color: #475569;
+    }
+    .preset-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .preset-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: grid;
+      gap: 6px;
+      cursor: pointer;
+      background: #fffaf5;
+      transition: 0.2s ease;
+    }
+    .preset-card input { margin-right: 8px; }
+    .preset-card:hover { border-color: #fdba74; }
+    .preset-title { font-size: 16px; font-weight: 600; color: var(--ink); }
+    .preset-desc { font-size: 13px; color: var(--muted); }
+    .preset-meta { font-size: 12px; color: #64748b; }
+    .advanced-only.is-hidden { display: none; }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .nav {
+      margin-top: 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .nav button {
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      font-size: 14px;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+    .nav button.primary {
+      border-color: #fdba74;
+      background: #fff7ed;
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .nav button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .review {
+      display: grid;
+      gap: 12px;
+    }
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 14px;
+      border-radius: 12px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .review-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .review-actions button {
+      border: 1px solid #fdba74;
+      background: #fff7ed;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
     }
     .hint {
-      margin-top: 12px;
       padding: 10px 12px;
       border-left: 3px solid var(--accent);
       background: #fff7ed;
@@ -107,21 +287,413 @@ const serveHTML = `<!DOCTYPE html>
       border-radius: 8px;
       font-size: 13px;
     }
+    .small { font-size: 12px; color: #64748b; }
+    @media (max-width: 720px) {
+      .scene { padding: 22px 16px 40px; }
+      .stepper { grid-template-columns: 1fr; }
+      .nav { flex-direction: column-reverse; align-items: stretch; }
+    }
     @keyframes lift {
-      from { opacity: 0; transform: translateY(6px); }
+      from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="scene">
+    <div class="hero">
+      <span class="pill">Local only</span>
+      <h1>Substack Downloader Wizard</h1>
+      <p>Build a download command in three steps. Every field maps directly to a CLI flag.</p>
+    </div>
+
     <div class="card">
-      <h1>Substack Downloader UI</h1>
-      <p>This local-only UI is a starting point for guided runs. More guided steps will appear here soon.</p>
-      <p>For now, use the CLI directly:</p>
-      <p><code>sbstck-dl download --url https://example.substack.com --create-archive</code></p>
-      <p class="hint">Tip: this server only binds to <strong>127.0.0.1</strong> for safety.</p>
+      <div class="stepper">
+        <button class="step-pill active" data-step-pill="1" type="button"><span>Step 1</span>Preset</button>
+        <button class="step-pill" data-step-pill="2" type="button"><span>Step 2</span>Configure</button>
+        <button class="step-pill" data-step-pill="3" type="button"><span>Step 3</span>Review</button>
+      </div>
+
+      <form id="wizardForm">
+        <section class="step-panel active" data-step="1">
+          <h2>Choose a preset</h2>
+          <p class="small">Basic keeps only the essentials. Advanced exposes every download flag.</p>
+          <div class="preset-grid">
+            <label class="preset-card">
+              <div>
+                <input type="radio" name="preset" value="basic" checked />
+                <span class="preset-title">Basic</span>
+              </div>
+              <span class="preset-desc">Quick download with archive and assets.</span>
+              <span class="preset-meta">URL, output, format, archive, assets, rate, workers.</span>
+            </label>
+            <label class="preset-card">
+              <div>
+                <input type="radio" name="preset" value="advanced" />
+                <span class="preset-title">Advanced</span>
+              </div>
+              <span class="preset-desc">Full control over filters, retries, and auth.</span>
+              <span class="preset-meta">Includes cookies, layout, metadata, and safety flags.</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="step-panel" data-step="2">
+          <h2>Configure the download</h2>
+
+          <div class="group">
+            <h3>Core</h3>
+            <div class="grid">
+              <label class="field">
+                Substack URL <span class="flag">--url</span>
+                <input id="url" data-flag="--url" type="text" placeholder="https://example.substack.com" />
+              </label>
+              <label class="field">
+                Output directory <span class="flag">--output</span>
+                <input id="output" data-flag="--output" type="text" placeholder="." />
+              </label>
+              <label class="field">
+                Format <span class="flag">--format</span>
+                <select id="format" data-flag="--format" data-default="html">
+                  <option value="html" selected>html</option>
+                  <option value="md">md</option>
+                  <option value="txt">txt</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="group">
+            <h3>Archive and assets</h3>
+            <div class="grid">
+              <label class="toggle-row">
+                <input id="createArchive" data-flag="--create-archive" type="checkbox" />
+                Create archive index <span class="flag">--create-archive</span>
+              </label>
+              <label class="toggle-row">
+                <input id="downloadImages" data-flag="--download-images" type="checkbox" />
+                Download images locally <span class="flag">--download-images</span>
+              </label>
+              <label class="toggle-row">
+                <input id="downloadFiles" data-flag="--download-files" type="checkbox" />
+                Download files locally <span class="flag">--download-files</span>
+              </label>
+              <label class="field">
+                Image quality <span class="flag">--image-quality</span>
+                <select id="imageQuality" data-flag="--image-quality" data-default="high" data-requires="downloadImages">
+                  <option value="high" selected>high</option>
+                  <option value="medium">medium</option>
+                  <option value="low">low</option>
+                </select>
+              </label>
+              <label class="field">
+                Images directory <span class="flag">--images-dir</span>
+                <input id="imagesDir" data-flag="--images-dir" data-default="images" data-requires="downloadImages" type="text" value="images" />
+              </label>
+              <label class="field">
+                Files directory <span class="flag">--files-dir</span>
+                <input id="filesDir" data-flag="--files-dir" data-default="files" data-requires="downloadFiles" type="text" value="files" />
+              </label>
+              <label class="field">
+                File extensions <span class="flag">--file-extensions</span>
+                <input id="fileExtensions" data-flag="--file-extensions" data-requires="downloadFiles" type="text" placeholder="pdf,docx" />
+              </label>
+            </div>
+          </div>
+
+          <div class="group advanced-only" data-advanced="true">
+            <h3>Filters and layout</h3>
+            <div class="grid">
+              <label class="field">
+                After date <span class="flag">--after</span>
+                <input id="afterDate" data-flag="--after" type="text" placeholder="YYYY-MM-DD" />
+              </label>
+              <label class="field">
+                Before date <span class="flag">--before</span>
+                <input id="beforeDate" data-flag="--before" type="text" placeholder="YYYY-MM-DD" />
+              </label>
+              <label class="field">
+                Layout <span class="flag">--layout</span>
+                <select id="layout" data-flag="--layout" data-default="flat">
+                  <option value="flat" selected>flat</option>
+                  <option value="year/month">year/month</option>
+                  <option value="year/slug">year/slug</option>
+                </select>
+              </label>
+              <label class="toggle-row">
+                <input id="writeMetadata" data-flag="--write-metadata" type="checkbox" />
+                Write metadata sidecars <span class="flag">--write-metadata</span>
+              </label>
+              <label class="toggle-row">
+                <input id="addSourceUrl" data-flag="--add-source-url" type="checkbox" />
+                Append source URL <span class="flag">--add-source-url</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="group advanced-only" data-advanced="true">
+            <h3>Run behavior</h3>
+            <div class="grid">
+              <label class="toggle-row">
+                <input id="dryRun" data-flag="--dry-run" type="checkbox" />
+                Dry run <span class="flag">--dry-run</span>
+              </label>
+              <label class="toggle-row">
+                <input id="forceDownload" data-flag="--force" type="checkbox" data-exclusive="existing" />
+                Force redownload <span class="flag">--force</span>
+              </label>
+              <label class="toggle-row">
+                <input id="skipExisting" data-flag="--skip-existing" type="checkbox" data-exclusive="existing" />
+                Skip existing <span class="flag">--skip-existing</span>
+              </label>
+              <label class="toggle-row">
+                <input id="refreshUpdated" data-flag="--refresh-updated" type="checkbox" />
+                Refresh updated posts <span class="flag">--refresh-updated</span>
+              </label>
+              <label class="toggle-row">
+                <input id="failFast" data-flag="--fail-fast" type="checkbox" data-exclusive="errors" />
+                Fail fast <span class="flag">--fail-fast</span>
+              </label>
+              <label class="toggle-row">
+                <input id="continueOnError" data-flag="--continue-on-error" type="checkbox" data-exclusive="errors" />
+                Continue on error <span class="flag">--continue-on-error</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="group">
+            <h3>Performance and logging</h3>
+            <div class="grid">
+              <label class="field">
+                Rate per second <span class="flag">--rate</span>
+                <input id="rate" data-flag="--rate" data-default="2" type="text" value="2" />
+              </label>
+              <label class="field">
+                Max workers <span class="flag">--max-workers</span>
+                <input id="maxWorkers" data-flag="--max-workers" data-default="10" type="text" value="10" />
+              </label>
+              <label class="field advanced-only" data-advanced="true">
+                Proxy URL <span class="flag">--proxy</span>
+                <input id="proxy" data-flag="--proxy" type="text" placeholder="http://localhost:8080" />
+              </label>
+              <label class="field advanced-only" data-advanced="true">
+                Log format <span class="flag">--log-format</span>
+                <select id="logFormat" data-flag="--log-format" data-default="text">
+                  <option value="text" selected>text</option>
+                  <option value="json">json</option>
+                </select>
+              </label>
+              <label class="toggle-row advanced-only" data-advanced="true">
+                <input id="verbose" data-flag="--verbose" type="checkbox" />
+                Verbose output <span class="flag">--verbose</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="group advanced-only" data-advanced="true">
+            <h3>Private newsletter auth</h3>
+            <div class="grid">
+              <label class="field">
+                Cookie name <span class="flag">--cookie_name</span>
+                <select id="cookieName" data-flag="--cookie_name">
+                  <option value="" selected>none</option>
+                  <option value="substack.sid">substack.sid</option>
+                  <option value="connect.sid">connect.sid</option>
+                </select>
+              </label>
+              <label class="field">
+                Cookie value <span class="flag">--cookie_val</span>
+                <input id="cookieVal" data-flag="--cookie_val" type="text" placeholder="substack.sid value" />
+              </label>
+              <label class="field">
+                Cookie value file <span class="flag">--cookie-val-file</span>
+                <input id="cookieValFile" data-flag="--cookie-val-file" type="text" placeholder="path/to/cookie.txt" />
+              </label>
+              <label class="field">
+                Cookie jar <span class="flag">--cookie-jar</span>
+                <input id="cookieJar" data-flag="--cookie-jar" type="text" placeholder="path/to/cookies.txt" />
+              </label>
+              <label class="field">
+                Notion labels <span class="flag">--notion-labels</span>
+                <input id="notionLabels" data-flag="--notion-labels" type="text" placeholder="path/to/notion-labels.yaml" />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section class="step-panel" data-step="3">
+          <div class="review">
+            <h2>Review command</h2>
+            <p>Copy and run this command in your terminal.</p>
+            <pre id="commandPreview">sbstck-dl download</pre>
+            <div class="review-actions">
+              <button type="button" id="copyBtn">Copy command</button>
+              <span id="copyStatus" class="small"></span>
+            </div>
+            <div id="reviewStatus" class="hint">Tip: add a URL to target a single post or a publication.</div>
+          </div>
+        </section>
+      </form>
+
+      <div class="nav">
+        <button type="button" id="backBtn" disabled>Back</button>
+        <button type="button" id="nextBtn" class="primary">Continue</button>
+      </div>
+    </div>
+
+    <div class="hint" style="margin-top: 18px;">
+      This UI binds to 127.0.0.1 only. Share the generated command with your terminal to run it.
     </div>
   </div>
+
+  <script>
+    (function () {
+      const stepPanels = Array.from(document.querySelectorAll('.step-panel'));
+      const stepPills = Array.from(document.querySelectorAll('[data-step-pill]'));
+      const backBtn = document.getElementById('backBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const form = document.getElementById('wizardForm');
+      const commandPreview = document.getElementById('commandPreview');
+      const copyBtn = document.getElementById('copyBtn');
+      const copyStatus = document.getElementById('copyStatus');
+      const reviewStatus = document.getElementById('reviewStatus');
+      const presetInputs = Array.from(document.querySelectorAll('input[name="preset"]'));
+      const advancedGroups = Array.from(document.querySelectorAll('[data-advanced="true"]'));
+      let currentStep = 1;
+      let activePreset = 'basic';
+
+      function showStep(step) {
+        currentStep = step;
+        stepPanels.forEach(panel => {
+          panel.classList.toggle('active', Number(panel.dataset.step) === step);
+        });
+        stepPills.forEach(pill => {
+          pill.classList.toggle('active', Number(pill.dataset.stepPill) === step);
+        });
+        backBtn.disabled = step === 1;
+        if (step === 3) {
+          nextBtn.textContent = 'Done';
+          nextBtn.disabled = true;
+        } else {
+          nextBtn.textContent = step === 2 ? 'Review' : 'Continue';
+          nextBtn.disabled = false;
+        }
+        if (step === 3) {
+          buildCommand();
+        }
+      }
+
+      function toggleAdvanced(enabled) {
+        advancedGroups.forEach(group => {
+          group.classList.toggle('is-hidden', !enabled);
+          group.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = !enabled;
+          });
+        });
+      }
+
+      function quote(value) {
+        if (/[\s"]/g.test(value)) {
+          return '"' + value.replace(/"/g, '\\"') + '"';
+        }
+        return value;
+      }
+
+      function buildCommand() {
+        const parts = ['sbstck-dl', 'download'];
+        const elements = Array.from(form.querySelectorAll('[data-flag]'));
+
+        elements.forEach(el => {
+          if (el.disabled) return;
+          const flag = el.dataset.flag;
+          if (el.dataset.requires) {
+            const req = document.getElementById(el.dataset.requires);
+            if (req && !req.checked) return;
+          }
+          if (el.type === 'checkbox') {
+            if (el.checked) parts.push(flag);
+            return;
+          }
+          if (el.type === 'radio') {
+            if (el.checked) parts.push(flag);
+            return;
+          }
+          const value = (el.value || '').trim();
+          if (value === '') return;
+          if (el.dataset.default && el.dataset.default === value) return;
+          parts.push(flag, quote(value));
+        });
+
+        commandPreview.textContent = parts.join(' ');
+
+        const urlValue = (document.getElementById('url').value || '').trim();
+        if (!urlValue) {
+          reviewStatus.textContent = 'Add --url to target a single post or a publication.';
+        } else {
+          reviewStatus.textContent = 'Ready to run. Paste the command into your terminal.';
+        }
+      }
+
+      function handleExclusiveGroups(target) {
+        const group = target.dataset.exclusive;
+        if (!group || !target.checked) return;
+        document.querySelectorAll('input[data-exclusive="' + group + '"]').forEach(el => {
+          if (el !== target) el.checked = false;
+        });
+      }
+
+      form.addEventListener('input', function (event) {
+        const target = event.target;
+        if (target && target.dataset && target.dataset.exclusive) {
+          handleExclusiveGroups(target);
+        }
+        buildCommand();
+      });
+
+      stepPills.forEach(pill => {
+        pill.addEventListener('click', function () {
+          showStep(Number(pill.dataset.stepPill));
+        });
+      });
+
+      presetInputs.forEach(input => {
+        input.addEventListener('change', function () {
+          if (input.checked) {
+            activePreset = input.value;
+            toggleAdvanced(activePreset === 'advanced');
+            buildCommand();
+          }
+        });
+      });
+
+      backBtn.addEventListener('click', function () {
+        if (currentStep > 1) showStep(currentStep - 1);
+      });
+
+      nextBtn.addEventListener('click', function () {
+        if (currentStep < 3) showStep(currentStep + 1);
+      });
+
+      if (copyBtn) {
+        copyBtn.addEventListener('click', function () {
+          const text = commandPreview.textContent;
+          if (!text) return;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+              copyStatus.textContent = 'Copied to clipboard.';
+            }).catch(() => {
+              copyStatus.textContent = 'Copy failed.';
+            });
+          } else {
+            copyStatus.textContent = 'Copy not supported.';
+          }
+        });
+      }
+
+      toggleAdvanced(false);
+      buildCommand();
+      showStep(1);
+    })();
+  </script>
 </body>
 </html>`

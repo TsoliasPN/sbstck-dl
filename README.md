@@ -300,13 +300,17 @@ output/
 
 ### Listing posts
 
+Use `--json` for structured output. Add `--with-metadata` to fetch title/date for each post (rate-limited).
+
 ```bash
 Usage:
   sbstck-dl list [flags]
 
 Flags:
-  -h, --help         help for list
-  -u, --url string   Specify the Substack url
+  -h, --help            help for list
+      --json            Output JSON
+  -u, --url string      Specify the Substack url
+      --with-metadata   Include title and date in JSON output (fetches each post)
 
 Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
@@ -518,7 +522,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
 - [x] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
 - [x] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)
-- [ ] (P2) Add `list --json` output; optionally add a metadata mode that also fetches title/date (rate-limited)
+- [x] (P2) Add `list --json` output; optionally add a metadata mode that also fetches title/date (rate-limited)
 
 ### Completed
 - [x] Improve retry logic

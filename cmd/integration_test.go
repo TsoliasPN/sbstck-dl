@@ -254,6 +254,8 @@ func TestCommandFlags(t *testing.T) {
 
 		// Check local flags
 		assert.NotNil(t, cmd.Flags().Lookup("url"))
+		assert.NotNil(t, cmd.Flags().Lookup("json"))
+		assert.NotNil(t, cmd.Flags().Lookup("with-metadata"))
 	})
 }
 

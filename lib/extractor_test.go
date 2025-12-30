@@ -1330,6 +1330,45 @@ func TestArchivePageGeneration(t *testing.T) {
 	})
 }
 
+func TestArchiveHTMLNotionBadges(t *testing.T) {
+	tempDir := t.TempDir()
+
+	postWithLinks := createSamplePost()
+	postWithLinks.PostDate = "2023-01-01T10:30:00Z"
+	postWithLinks.Title = "Notion Post"
+
+	postWithoutLinks := createSamplePost()
+	postWithoutLinks.PostDate = "2023-01-02T10:30:00Z"
+	postWithoutLinks.Title = "Plain Post"
+
+	withLinksPath := filepath.Join(tempDir, "post-with-links.html")
+	withoutLinksPath := filepath.Join(tempDir, "post-without-links.html")
+
+	withLinksContent := `<html><body>
+<a href="https://www.notion.so/Workspace/Page-123?utm_source=x">Notion</a>
+<a href="https://www.notion.so/Workspace/Page-123">Notion</a>
+<a href="https://example.notion.site/Page-456/">Notion</a>
+</body></html>`
+	withoutLinksContent := `<html><body><p>No links here.</p></body></html>`
+
+	require.NoError(t, os.WriteFile(withLinksPath, []byte(withLinksContent), 0644))
+	require.NoError(t, os.WriteFile(withoutLinksPath, []byte(withoutLinksContent), 0644))
+
+	archive := NewArchive()
+	archive.AddEntry(postWithoutLinks, withoutLinksPath, time.Now())
+	archive.AddEntry(postWithLinks, withLinksPath, time.Now())
+
+	require.NoError(t, archive.GenerateHTML(tempDir))
+
+	indexPath := filepath.Join(tempDir, "index.html")
+	htmlContent, err := os.ReadFile(indexPath)
+	require.NoError(t, err)
+
+	assert.Contains(t, string(htmlContent), "Notion 2")
+	assert.Contains(t, string(htmlContent), "notion-links.html")
+	assert.NotContains(t, string(htmlContent), "Notion 0")
+}
+
 // Benchmarks
 func BenchmarkExtractor(b *testing.B) {
 	// Create test server

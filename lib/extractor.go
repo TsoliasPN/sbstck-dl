@@ -1,10 +1,12 @@
 package lib
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -525,73 +527,507 @@ func (a *Archive) sortEntries() {
 // GenerateHTML creates an HTML archive page
 func (a *Archive) GenerateHTML(outputDir string) error {
 	archivePath := filepath.Join(outputDir, "index.html")
-	
-	html := `<!DOCTYPE html>
+
+	type archiveHTMLEntry struct {
+		Title            string
+		Description      string
+		CoverImage       string
+		CanonicalURL     string
+		RelPath          string
+		PubDateDisplay   string
+		PubDateISO       string
+		DownloadDisplay  string
+		Year             string
+		WordCount        int
+		EstimatedReadMin int
+	}
+
+	type archiveYearGroup struct {
+		Year    string
+		Entries []archiveHTMLEntry
+	}
+
+	type archiveHTMLPage struct {
+		GeneratedAt string
+		TotalPosts  int
+		YearGroups  []archiveYearGroup
+	}
+
+	generatedAt := time.Now().Format("January 2, 2006 15:04")
+	page := archiveHTMLPage{
+		GeneratedAt: generatedAt,
+		TotalPosts:  len(a.Entries),
+		YearGroups:  make([]archiveYearGroup, 0),
+	}
+
+	yearGroupIndex := make(map[string]int)
+	yearOrder := make([]string, 0)
+
+	for _, entry := range a.Entries {
+		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
+		relPath = filepath.ToSlash(relPath)
+
+		pubDateDisplay := entry.Post.PostDate
+		pubDateISO := entry.Post.PostDate
+		year := "Unknown"
+		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
+			pubDateDisplay = parsedDate.Format("January 2, 2006")
+			year = fmt.Sprintf("%d", parsedDate.Year())
+			pubDateISO = parsedDate.Format(time.RFC3339)
+		}
+
+		downloadDisplay := entry.DownloadTime.Format("January 2, 2006 15:04")
+
+		description := entry.Post.Subtitle
+		if description == "" {
+			description = entry.Post.Description
+		}
+
+		estimatedReadMin := 0
+		if entry.Post.WordCount > 0 {
+			estimatedReadMin = entry.Post.WordCount / 200
+			if estimatedReadMin < 1 {
+				estimatedReadMin = 1
+			}
+		}
+
+		htmlEntry := archiveHTMLEntry{
+			Title:            entry.Post.Title,
+			Description:      description,
+			CoverImage:       entry.Post.CoverImage,
+			CanonicalURL:     entry.Post.CanonicalUrl,
+			RelPath:          relPath,
+			PubDateDisplay:   pubDateDisplay,
+			PubDateISO:       pubDateISO,
+			DownloadDisplay:  downloadDisplay,
+			Year:             year,
+			WordCount:        entry.Post.WordCount,
+			EstimatedReadMin: estimatedReadMin,
+		}
+
+		idx, ok := yearGroupIndex[year]
+		if !ok {
+			yearOrder = append(yearOrder, year)
+			yearGroupIndex[year] = len(page.YearGroups)
+			page.YearGroups = append(page.YearGroups, archiveYearGroup{Year: year, Entries: []archiveHTMLEntry{htmlEntry}})
+			continue
+		}
+		page.YearGroups[idx].Entries = append(page.YearGroups[idx].Entries, htmlEntry)
+	}
+
+	// Keep "Unknown" last when it exists; otherwise preserve the archive's publication-date order.
+	if len(page.YearGroups) > 1 {
+		hasUnknown := false
+		for _, y := range yearOrder {
+			if y == "Unknown" {
+				hasUnknown = true
+				break
+			}
+		}
+		if hasUnknown {
+			// Stable sort by numeric year desc, then "Unknown" last.
+			sort.SliceStable(page.YearGroups, func(i, j int) bool {
+				yi := page.YearGroups[i].Year
+				yj := page.YearGroups[j].Year
+				if yi == "Unknown" {
+					return false
+				}
+				if yj == "Unknown" {
+					return true
+				}
+				return yi > yj
+			})
+		}
+	}
+
+	const tpl = `<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Substack Archive</title>
 	<style>
-		body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-		h1 { color: #333; }
-		.post { margin-bottom: 30px; padding: 20px; border: 1px solid #eee; border-radius: 8px; }
-		.post h2 { margin-top: 0; }
-		.post h2 a { text-decoration: none; color: #ff6719; }
-		.post h2 a:hover { text-decoration: underline; }
-		.meta { color: #666; font-size: 14px; margin-bottom: 10px; }
-		.subtitle { color: #777; font-style: italic; margin-bottom: 10px; }
-		.cover-image { max-width: 200px; float: right; margin-left: 15px; }
+		:root {
+			--bg: #ffffff;
+			--fg: #111827;
+			--muted: #6b7280;
+			--card: #ffffff;
+			--border: #e5e7eb;
+			--accent: #ff6719;
+			--accent-weak: rgba(255, 103, 25, 0.12);
+			--shadow: 0 1px 2px rgba(0,0,0,0.06);
+			--shadow-strong: 0 8px 30px rgba(0,0,0,0.10);
+		}
+		@media (prefers-color-scheme: dark) {
+			:root {
+				--bg: #0b0f19;
+				--fg: #e5e7eb;
+				--muted: #9ca3af;
+				--card: #0f1629;
+				--border: rgba(255,255,255,0.12);
+				--accent-weak: rgba(255, 103, 25, 0.18);
+				--shadow: 0 1px 2px rgba(0,0,0,0.35);
+				--shadow-strong: 0 12px 40px rgba(0,0,0,0.50);
+			}
+		}
+		[data-theme="light"] { color-scheme: light; }
+		[data-theme="dark"] { color-scheme: dark; }
+
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+			background: var(--bg);
+			color: var(--fg);
+		}
+		a { color: inherit; }
+
+		.container { max-width: 1100px; margin: 0 auto; padding: 18px 16px 48px; }
+
+		header {
+			position: sticky;
+			top: 0;
+			z-index: 10;
+			background: color-mix(in srgb, var(--bg) 88%, transparent);
+			backdrop-filter: blur(10px);
+			border-bottom: 1px solid var(--border);
+		}
+		.header-inner { max-width: 1100px; margin: 0 auto; padding: 12px 16px; display: grid; gap: 10px; }
+
+		.title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+		h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
+		.meta { color: var(--muted); font-size: 13px; }
+
+		.controls { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; }
+		.controls input[type="search"] {
+			width: 100%;
+			padding: 10px 12px;
+			border: 1px solid var(--border);
+			background: var(--card);
+			color: var(--fg);
+			border-radius: 10px;
+			box-shadow: var(--shadow);
+		}
+		.controls select, .controls button, .controls label {
+			padding: 10px 12px;
+			border: 1px solid var(--border);
+			background: var(--card);
+			color: var(--fg);
+			border-radius: 10px;
+			box-shadow: var(--shadow);
+			font-size: 13px;
+		}
+		.controls label { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; user-select: none; }
+		.controls input[type="checkbox"] { transform: translateY(0.5px); }
+
+		.layout { display: grid; grid-template-columns: 190px 1fr; gap: 18px; margin-top: 18px; }
+		@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+		.year-nav {
+			position: sticky;
+			top: 104px;
+			align-self: start;
+			border: 1px solid var(--border);
+			background: var(--card);
+			border-radius: 12px;
+			box-shadow: var(--shadow);
+			padding: 10px;
+		}
+		.year-nav h2 { margin: 4px 8px 8px; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+		.year-nav a {
+			display: flex;
+			justify-content: space-between;
+			gap: 10px;
+			padding: 8px 10px;
+			border-radius: 10px;
+			text-decoration: none;
+		}
+		.year-nav a:hover { background: var(--accent-weak); }
+		.year-nav .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+		@media (max-width: 860px) { .year-nav { position: static; } }
+
+		main { min-width: 0; }
+		.year-section { margin-bottom: 26px; }
+		.year-header {
+			display: flex;
+			align-items: baseline;
+			justify-content: space-between;
+			gap: 10px;
+			margin: 0 0 12px;
+		}
+		.year-header h2 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+		.year-header .year-meta { color: var(--muted); font-size: 13px; }
+
+		.grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+		@media (min-width: 740px) { .grid { grid-template-columns: 1fr 1fr; } }
+
+		.post-card {
+			border: 1px solid var(--border);
+			background: var(--card);
+			border-radius: 14px;
+			box-shadow: var(--shadow);
+			overflow: hidden;
+			display: grid;
+			grid-template-columns: 128px 1fr;
+			min-height: 110px;
+		}
+		.post-card.hidden { display: none; }
+		.no-covers .post-card { grid-template-columns: 1fr; }
+
+		.cover {
+			width: 100%;
+			height: 100%;
+			display: block;
+			object-fit: cover;
+			background: color-mix(in srgb, var(--border) 30%, transparent);
+		}
+		.no-covers .cover-wrap { display: none; }
+		.cover-wrap { border-right: 1px solid var(--border); }
+
+		.post-body { padding: 12px 12px 12px 14px; min-width: 0; display: grid; gap: 6px; }
+		.post-title { margin: 0; font-size: 15px; line-height: 1.25; letter-spacing: -0.01em; }
+		.post-title a { text-decoration: none; }
+		.post-title a:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 65%, transparent); }
+		.post-meta { color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 8px 10px; }
+		.post-desc { color: color-mix(in srgb, var(--fg) 82%, var(--muted)); font-size: 13px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+		.links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+		.links a {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			padding: 7px 10px;
+			border-radius: 10px;
+			border: 1px solid var(--border);
+			background: transparent;
+			text-decoration: none;
+			font-size: 12.5px;
+		}
+		.links a.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-weak); }
+		.links a:hover { box-shadow: var(--shadow-strong); transform: translateY(-0.5px); transition: 0.12s ease; }
+
+		.footer-note { margin-top: 22px; color: var(--muted); font-size: 12px; }
 	</style>
 </head>
 <body>
-	<h1>Substack Archive</h1>
-`
+	<header>
+		<div class="header-inner">
+			<div class="title-row">
+				<h1>Substack Archive</h1>
+				<div class="meta">
+					<span id="resultCount">{{.TotalPosts}}</span> posts · Generated {{.GeneratedAt}}
+				</div>
+			</div>
+			<div class="controls" role="region" aria-label="Archive controls">
+				<input id="search" type="search" placeholder="Search title or description…" autocomplete="off" />
+				<select id="sort">
+					<option value="newest" selected>Newest</option>
+					<option value="oldest">Oldest</option>
+					<option value="title">Title</option>
+				</select>
+				<label title="Toggle cover thumbnails">
+					<input id="toggleCovers" type="checkbox" checked />
+					Covers
+				</label>
+				<button id="toggleTheme" type="button" title="Toggle theme">Theme</button>
+			</div>
+			<div class="meta" id="status">Showing {{.TotalPosts}} of {{.TotalPosts}}</div>
+		</div>
+	</header>
 
-	for _, entry := range a.Entries {
-		// Make file path relative from archive directory
-		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
-		
-		// Format publication date
-		pubDate := entry.Post.PostDate
-		if parsedDate, err := time.Parse(time.RFC3339, entry.Post.PostDate); err == nil {
-			pubDate = parsedDate.Format("January 2, 2006")
-		}
-		
-		// Format download date
-		downloadDate := entry.DownloadTime.Format("January 2, 2006 15:04")
-		
-		html += `	<div class="post">
-`
-		
-		// Add cover image if available
-		if entry.Post.CoverImage != "" {
-			html += fmt.Sprintf(`		<img src="%s" alt="Cover" class="cover-image">
-`, entry.Post.CoverImage)
-		}
-		
-		html += fmt.Sprintf(`		<h2><a href="%s">%s</a></h2>
-		<div class="meta">Published: %s | Downloaded: %s</div>
-`, relPath, entry.Post.Title, pubDate, downloadDate)
-		
-		// Add subtitle/description
-		description := entry.Post.Subtitle
-		if description == "" {
-			description = entry.Post.Description
-		}
-		if description != "" {
-			html += fmt.Sprintf(`		<div class="subtitle">%s</div>
-`, description)
-		}
-		
-		html += `	</div>
-`
-	}
-	
-	html += `</body>
+	<div class="container layout">
+		<nav class="year-nav" aria-label="Years">
+			<h2>Years</h2>
+			{{range .YearGroups}}
+				<a href="#year-{{.Year}}" data-year-link="{{.Year}}">
+					<span>{{.Year}}</span>
+					<span class="count" data-year-count="{{.Year}}">{{len .Entries}}</span>
+				</a>
+			{{end}}
+		</nav>
+
+		<main>
+			{{range .YearGroups}}
+				<section class="year-section" id="year-{{.Year}}" data-year="{{.Year}}">
+					<div class="year-header">
+						<h2>{{.Year}}</h2>
+						<div class="year-meta"><span data-year-visible="{{.Year}}">{{len .Entries}}</span> posts</div>
+					</div>
+					<div class="grid" data-year-grid="{{.Year}}">
+						{{range .Entries}}
+							<article class="post-card" data-title="{{.Title}}" data-desc="{{.Description}}" data-pubdate="{{.PubDateISO}}">
+								<div class="cover-wrap">
+									{{if .CoverImage}}<img class="cover" src="{{.CoverImage}}" alt="" loading="lazy" />{{else}}<img class="cover" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="" />{{end}}
+								</div>
+								<div class="post-body">
+									<h3 class="post-title"><a href="{{.RelPath}}">{{.Title}}</a></h3>
+									<div class="post-meta">
+										<span>Published: {{.PubDateDisplay}}</span>
+										<span>Downloaded: {{.DownloadDisplay}}</span>
+										{{if gt .EstimatedReadMin 0}}<span>Read: ~{{.EstimatedReadMin}} min</span>{{end}}
+									</div>
+									{{if .Description}}<div class="post-desc">{{.Description}}</div>{{end}}
+									<div class="links">
+										<a class="primary" href="{{.RelPath}}">Open local</a>
+										{{if .CanonicalURL}}<a href="{{.CanonicalURL}}" target="_blank" rel="noreferrer">Open original</a>{{end}}
+									</div>
+								</div>
+							</article>
+						{{end}}
+					</div>
+				</section>
+			{{end}}
+			<div class="footer-note">Tip: use search to quickly find posts; sort by title when looking for a specific entry.</div>
+		</main>
+	</div>
+
+	<script>
+		(function () {
+			const root = document.documentElement;
+			const search = document.getElementById('search');
+			const sort = document.getElementById('sort');
+			const status = document.getElementById('status');
+			const resultCount = document.getElementById('resultCount');
+			const toggleCovers = document.getElementById('toggleCovers');
+			const toggleTheme = document.getElementById('toggleTheme');
+
+			const yearSections = Array.from(document.querySelectorAll('.year-section'));
+			const allCards = Array.from(document.querySelectorAll('.post-card'));
+
+			function setTheme(theme) {
+				root.setAttribute('data-theme', theme);
+				localStorage.setItem('sbstck.theme', theme);
+			}
+
+			function toggleThemeMode() {
+				const current = root.getAttribute('data-theme');
+				if (current === 'dark') return setTheme('light');
+				return setTheme('dark');
+			}
+
+			function setCoversEnabled(enabled) {
+				if (enabled) document.body.classList.remove('no-covers');
+				else document.body.classList.add('no-covers');
+				toggleCovers.checked = enabled;
+				localStorage.setItem('sbstck.covers', enabled ? '1' : '0');
+			}
+
+			function normalize(s) {
+				return (s || '').toString().toLowerCase();
+			}
+
+			function matches(card, query) {
+				if (!query) return true;
+				const t = normalize(card.getAttribute('data-title'));
+				const d = normalize(card.getAttribute('data-desc'));
+				return t.includes(query) || d.includes(query);
+			}
+
+			function updateCounts(visibleCount) {
+				status.textContent = 'Showing ' + visibleCount + ' of ' + allCards.length;
+				resultCount.textContent = visibleCount;
+				yearSections.forEach(section => {
+					const year = section.getAttribute('data-year');
+					const cards = Array.from(section.querySelectorAll('.post-card'));
+					const visible = cards.filter(c => !c.classList.contains('hidden')).length;
+					const visEl = section.querySelector('[data-year-visible="' + year + '"]');
+					if (visEl) visEl.textContent = visible;
+					const navCount = document.querySelector('[data-year-count="' + year + '"]');
+					if (navCount) navCount.textContent = visible;
+					section.style.display = visible === 0 ? 'none' : '';
+					const navLink = document.querySelector('[data-year-link="' + year + '"]');
+					if (navLink) navLink.style.display = visible === 0 ? 'none' : '';
+				});
+			}
+
+			let filterTimer = null;
+			function applyFilter() {
+				const q = normalize(search.value).trim();
+				let visible = 0;
+				allCards.forEach(card => {
+					const ok = matches(card, q);
+					card.classList.toggle('hidden', !ok);
+					if (ok) visible++;
+				});
+				updateCounts(visible);
+			}
+
+			function parseDate(card) {
+				const iso = card.getAttribute('data-pubdate');
+				const t = Date.parse(iso);
+				return Number.isFinite(t) ? t : 0;
+			}
+
+			function sortSectionCards(section, mode) {
+				const grid = section.querySelector('.grid');
+				if (!grid) return;
+				const cards = Array.from(grid.querySelectorAll('.post-card'));
+
+				if (mode === 'title') {
+					cards.sort((a, b) => normalize(a.getAttribute('data-title')).localeCompare(normalize(b.getAttribute('data-title'))));
+				} else if (mode === 'oldest') {
+					cards.sort((a, b) => parseDate(a) - parseDate(b));
+				} else {
+					cards.sort((a, b) => parseDate(b) - parseDate(a));
+				}
+
+				cards.forEach(c => grid.appendChild(c));
+			}
+
+			function sortYears(mode) {
+				const container = document.querySelector('main');
+				if (!container) return;
+
+				const sections = Array.from(container.querySelectorAll('.year-section'));
+				sections.sort((a, b) => {
+					const ya = a.getAttribute('data-year');
+					const yb = b.getAttribute('data-year');
+					if (ya === 'Unknown') return 1;
+					if (yb === 'Unknown') return -1;
+					if (mode === 'oldest') return ya.localeCompare(yb);
+					return yb.localeCompare(ya);
+				});
+
+				sections.forEach(s => container.insertBefore(s, container.querySelector('.footer-note')));
+			}
+
+			function applySort() {
+				const mode = sort.value;
+				sortYears(mode);
+				yearSections.forEach(section => sortSectionCards(section, mode));
+				applyFilter();
+			}
+
+			search.addEventListener('input', function () {
+				if (filterTimer) clearTimeout(filterTimer);
+				filterTimer = setTimeout(applyFilter, 60);
+			});
+			sort.addEventListener('change', applySort);
+			toggleCovers.addEventListener('change', () => setCoversEnabled(toggleCovers.checked));
+			toggleTheme.addEventListener('click', toggleThemeMode);
+
+			// Restore preferences
+			const savedTheme = localStorage.getItem('sbstck.theme');
+			if (savedTheme === 'dark' || savedTheme === 'light') setTheme(savedTheme);
+			const savedCovers = localStorage.getItem('sbstck.covers');
+			if (savedCovers === '0') setCoversEnabled(false);
+
+			applySort();
+		})();
+	</script>
+</body>
 </html>`
-	
-	return os.WriteFile(archivePath, []byte(html), 0644)
+
+	t, err := template.New("archive").Parse(tpl)
+	if err != nil {
+		return err
+	}
+
+	var out bytes.Buffer
+	if err := t.Execute(&out, page); err != nil {
+		return err
+	}
+
+	return os.WriteFile(archivePath, out.Bytes(), 0644)
 }
 
 // GenerateMarkdown creates a Markdown archive page

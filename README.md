@@ -307,11 +307,17 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 - [ ] (P1) Support reading cookie value from a file (e.g. `--cookie-val-file`)
 - [ ] (P1) Support importing cookies from a Netscape cookie jar (optional)
 
-#### P2 — Output & archive UX
+#### P2 - Output & archive UX
 - [ ] (P2) Add `--layout` for output structure (e.g. `flat` (current), `year/month`, `year/slug`)
 - [ ] (P2) Optionally write per-post metadata sidecar (e.g. `post.json`) or Markdown front matter
 - [ ] (P2) Add an `archive` command to regenerate `index.{format}` from existing downloads (no re-download)
 - [ ] (P2) Add optional filtering/sorting options for the archive page (e.g. by date range, newest/oldest)
+- [ ] (P2) Extract and index Notion links across posts into a separate `notion-links.{html,md}` (deduped + grouped by post)
+- [ ] (P2) Add a Notion badge/count in `index.html` for posts containing Notion links, with quick navigation to the links list
+- [ ] (P2) Persist extracted links in per-post metadata (sidecar JSON/front matter) to avoid re-parsing content on reruns
+- [ ] (P2) Add an index-by-domain view (Notion, Google Docs, GitHub, etc.) so Notion links become a one-click filter
+- [ ] (P2) Normalize/dedupe extracted Notion URLs (strip tracking params, canonicalize hosts/paths)
+- [ ] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
 
 #### P2 — Config, CLI & docs
 - [ ] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags

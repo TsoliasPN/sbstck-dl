@@ -55,6 +55,7 @@ var (
 	cookieValFile    string
 	cookieJarPath    string
 	notionLabelsPath string
+	configPath       string
 	ctx              = context.Background()
 	parsedProxyURL   *url.URL
 	fetcher          *lib.Fetcher
@@ -65,6 +66,15 @@ var (
 		Short: "Substack Downloader",
 		Long:  `sbstck-dl is a command line tool for downloading Substack newsletters for archival purposes, offline reading, or data analysis.`,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			if configPath != "" {
+				cfg, err := LoadConfig(configPath)
+				if err != nil {
+					log.Fatalf("failed to load config: %v", err)
+				}
+				if err := applyConfigToCommand(cmd, cfg); err != nil {
+					log.Fatalf("failed to apply config: %v", err)
+				}
+			}
 
 			var cookie *http.Cookie
 
@@ -153,6 +163,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cookieValFile, "cookie-val-file", "", "Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)")
 	rootCmd.PersistentFlags().StringVar(&cookieJarPath, "cookie-jar", "", "Read cookies from a Netscape cookie jar file (cookies.txt)")
 	rootCmd.PersistentFlags().StringVar(&notionLabelsPath, "notion-labels", "", "Path to a YAML/JSON map of Notion URL to label for notion-links output")
+	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "Load options from a YAML/JSON config file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.PersistentFlags().IntVarP(&ratePerSecond, "rate", "r", lib.DefaultRatePerSecond, "Specify the rate of requests per second")
 	rootCmd.PersistentFlags().StringVar(&beforeDate, "before", "", "Download posts published before this date (format: YYYY-MM-DD)")

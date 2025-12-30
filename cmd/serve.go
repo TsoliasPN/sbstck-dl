@@ -721,6 +721,35 @@ const serveHTML = `<!DOCTYPE html>
     .job-tag.failed { border-color: #fca5a5; color: #b91c1c; background: #fee2e2; }
     .job-tag.running { border-color: #fde68a; color: #92400e; background: #ffedd5; }
     .job-tag.skipped { border-color: #cbd5f5; color: #1d4ed8; background: #e0e7ff; }
+    .profile-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .profile-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #f8fafc;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .profile-actions {
+      display: inline-flex;
+      gap: 6px;
+    }
+    .profile-actions button {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+      cursor: pointer;
+      font-size: 12px;
+    }
     .field.invalid input,
     .field.invalid select,
     .field.invalid textarea {
@@ -1134,6 +1163,28 @@ const serveHTML = `<!DOCTYPE html>
             <div id="reviewStatus" class="hint">Tip: add a URL to target a single post or a publication.</div>
             <ul id="validationErrors" class="error-list" hidden></ul>
             <div class="group">
+              <h3>Profiles and config</h3>
+              <p class="small">Save presets locally and export/import JSON config files. Cookies are only stored if you opt in.</p>
+              <div class="grid">
+                <label class="field">
+                  Profile name
+                  <input id="profileName" type="text" placeholder="My archive run" />
+                </label>
+                <label class="toggle-row">
+                  <input id="includeSecrets" type="checkbox" />
+                  Include cookies in saved profiles/configs
+                </label>
+              </div>
+              <div class="review-actions">
+                <button type="button" id="saveProfileBtn">Save profile</button>
+                <button type="button" id="exportConfigBtn">Export config</button>
+                <button type="button" id="importConfigBtn">Import config</button>
+                <input id="importConfigInput" type="file" accept=".json" hidden />
+              </div>
+              <div id="profileStatus" class="test-status">No profiles saved yet.</div>
+              <div id="profileList" class="profile-list"></div>
+            </div>
+            <div class="group">
               <h3>Dry-run preview</h3>
               <p class="small">See how many posts will be downloaded or skipped before running.</p>
               <button type="button" id="previewBtn" class="primary">Run preview</button>
@@ -1245,6 +1296,14 @@ const serveHTML = `<!DOCTYPE html>
       const previewRefreshed = document.getElementById('previewRefreshed');
       const previewOldest = document.getElementById('previewOldest');
       const previewNewest = document.getElementById('previewNewest');
+      const profileNameInput = document.getElementById('profileName');
+      const includeSecretsInput = document.getElementById('includeSecrets');
+      const saveProfileBtn = document.getElementById('saveProfileBtn');
+      const exportConfigBtn = document.getElementById('exportConfigBtn');
+      const importConfigBtn = document.getElementById('importConfigBtn');
+      const importConfigInput = document.getElementById('importConfigInput');
+      const profileStatus = document.getElementById('profileStatus');
+      const profileList = document.getElementById('profileList');
       const rerunCheckBtn = document.getElementById('rerunCheckBtn');
       const rerunStartBtn = document.getElementById('rerunStartBtn');
       const rerunStatus = document.getElementById('rerunStatus');
@@ -1665,6 +1724,18 @@ const serveHTML = `<!DOCTYPE html>
         rerunStatus.className = klass;
       }
 
+      function setProfileStatus(message, state) {
+        if (!profileStatus) return;
+        profileStatus.textContent = message;
+        let klass = 'test-status';
+        if (state === 'ok') {
+          klass += ' ok';
+        } else if (state === 'bad') {
+          klass += ' bad';
+        }
+        profileStatus.className = klass;
+      }
+
       function renderJobLogs(logs) {
         if (!jobLogs) return;
         jobLogs.innerHTML = '';
@@ -1817,6 +1888,262 @@ const serveHTML = `<!DOCTYPE html>
         };
       }
 
+      function collectConfig(includeSecrets) {
+        const config = {
+          url: (urlInput && !urlInput.disabled) ? urlInput.value.trim() : '',
+          output: readValue('output'),
+          format: readValue('format'),
+          add_source_url: readChecked('addSourceUrl'),
+          create_archive: readChecked('createArchive'),
+          download_images: readChecked('downloadImages'),
+          image_quality: readValue('imageQuality'),
+          images_dir: readValue('imagesDir'),
+          download_files: readChecked('downloadFiles'),
+          file_extensions: readValue('fileExtensions'),
+          files_dir: readValue('filesDir'),
+          dry_run: readChecked('dryRun'),
+          force: readChecked('forceDownload'),
+          skip_existing: readChecked('skipExisting'),
+          refresh_updated: readChecked('refreshUpdated'),
+          layout: readValue('layout'),
+          write_metadata: readChecked('writeMetadata'),
+          fail_fast: readChecked('failFast'),
+          continue_on_error: readChecked('continueOnError'),
+          after: readValue('afterDate'),
+          before: readValue('beforeDate'),
+          rate: parseInt(readValue('rate'), 10),
+          max_workers: parseInt(readValue('maxWorkers'), 10),
+          proxy: (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : '',
+          cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
+          cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
+          cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
+          cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+          notion_labels: readValue('notionLabels'),
+          log_format: readValue('logFormat'),
+          verbose: readChecked('verbose')
+        };
+
+        if (!Number.isFinite(config.rate) || config.rate <= 0) {
+          delete config.rate;
+        }
+        if (!Number.isFinite(config.max_workers) || config.max_workers <= 0) {
+          delete config.max_workers;
+        }
+
+        if (!includeSecrets) {
+          delete config.cookie_name;
+          delete config.cookie_val;
+          delete config.cookie_val_file;
+          delete config.cookie_jar;
+        }
+
+        return config;
+      }
+
+      function shouldUseAdvanced(config) {
+        const advancedKeys = [
+          'after', 'before', 'layout', 'write_metadata', 'add_source_url',
+          'dry_run', 'force', 'skip_existing', 'refresh_updated',
+          'fail_fast', 'continue_on_error', 'proxy', 'log_format',
+          'cookie_name', 'cookie_val', 'cookie_val_file', 'cookie_jar',
+          'notion_labels', 'verbose'
+        ];
+        return advancedKeys.some(key => {
+          const value = config[key];
+          if (typeof value === 'boolean') {
+            return value;
+          }
+          return value !== undefined && value !== null && String(value).trim() !== '';
+        });
+      }
+
+      function setPreset(value) {
+        activePreset = value;
+        presetInputs.forEach(input => {
+          input.checked = input.value === value;
+        });
+        toggleAdvanced(value === 'advanced');
+      }
+
+      function applyConfigToForm(config, preset) {
+        if (!config) return;
+        if (form && form.reset) {
+          form.reset();
+        }
+        const desiredPreset = preset || (shouldUseAdvanced(config) ? 'advanced' : 'basic');
+        setPreset(desiredPreset);
+
+        const setValue = (id, value) => {
+          const el = document.getElementById(id);
+          if (!el || value === undefined || value === null) return;
+          el.value = String(value);
+        };
+        const setChecked = (id, value) => {
+          const el = document.getElementById(id);
+          if (!el || value === undefined || value === null) return;
+          el.checked = Boolean(value);
+        };
+
+        setValue('url', config.url);
+        setValue('output', config.output);
+        setValue('format', config.format);
+        setChecked('dryRun', config.dry_run);
+        setChecked('addSourceUrl', config.add_source_url);
+        setChecked('createArchive', config.create_archive);
+        setChecked('downloadImages', config.download_images);
+        setValue('imageQuality', config.image_quality);
+        setValue('imagesDir', config.images_dir);
+        setChecked('downloadFiles', config.download_files);
+        setValue('fileExtensions', config.file_extensions);
+        setValue('filesDir', config.files_dir);
+        setChecked('forceDownload', config.force);
+        setChecked('skipExisting', config.skip_existing);
+        setChecked('refreshUpdated', config.refresh_updated);
+        setValue('layout', config.layout);
+        setChecked('writeMetadata', config.write_metadata);
+        setChecked('failFast', config.fail_fast);
+        setChecked('continueOnError', config.continue_on_error);
+        setValue('afterDate', config.after);
+        setValue('beforeDate', config.before);
+        if (config.rate !== undefined && config.rate !== null) {
+          setValue('rate', config.rate);
+        }
+        if (config.max_workers !== undefined && config.max_workers !== null) {
+          setValue('maxWorkers', config.max_workers);
+        }
+        setValue('proxy', config.proxy);
+        setValue('cookieName', config.cookie_name);
+        setValue('cookieVal', config.cookie_val);
+        setValue('cookieValFile', config.cookie_val_file);
+        setValue('cookieJar', config.cookie_jar);
+        setValue('notionLabels', config.notion_labels);
+        setValue('logFormat', config.log_format);
+        setChecked('verbose', config.verbose);
+
+        buildCommand();
+      }
+
+      const profileStorageKey = 'sbstckProfiles';
+
+      function loadProfiles() {
+        if (!window.localStorage) return [];
+        const raw = window.localStorage.getItem(profileStorageKey);
+        if (!raw) return [];
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          return [];
+        }
+      }
+
+      function saveProfiles(profiles) {
+        if (!window.localStorage) return;
+        window.localStorage.setItem(profileStorageKey, JSON.stringify(profiles));
+      }
+
+      function renderProfiles() {
+        if (!profileList) return;
+        profileList.innerHTML = '';
+        const profiles = loadProfiles();
+        if (profiles.length === 0) {
+          setProfileStatus('No profiles saved yet.', '');
+          return;
+        }
+        setProfileStatus('Saved profiles: ' + profiles.length, 'ok');
+        profiles.forEach(profile => {
+          const item = document.createElement('div');
+          item.className = 'profile-item';
+          const label = document.createElement('div');
+          label.textContent = profile.name || 'Untitled';
+          const actions = document.createElement('div');
+          actions.className = 'profile-actions';
+
+          const loadBtn = document.createElement('button');
+          loadBtn.type = 'button';
+          loadBtn.textContent = 'Load';
+          loadBtn.addEventListener('click', function () {
+            applyConfigToForm(profile.config || {}, profile.preset);
+            setProfileStatus('Loaded profile "' + (profile.name || 'Untitled') + '".', 'ok');
+          });
+
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.textContent = 'Delete';
+          removeBtn.addEventListener('click', function () {
+            const next = loadProfiles().filter(entry => entry.id !== profile.id);
+            saveProfiles(next);
+            renderProfiles();
+          });
+
+          actions.appendChild(loadBtn);
+          actions.appendChild(removeBtn);
+          item.appendChild(label);
+          item.appendChild(actions);
+          profileList.appendChild(item);
+        });
+      }
+
+      if (saveProfileBtn) {
+        saveProfileBtn.addEventListener('click', function () {
+          const name = (profileNameInput ? profileNameInput.value.trim() : '') || 'Untitled';
+          const includeSecrets = includeSecretsInput ? includeSecretsInput.checked : false;
+          const config = collectConfig(includeSecrets);
+          const profiles = loadProfiles();
+          profiles.unshift({
+            id: String(Date.now()),
+            name: name,
+            preset: activePreset,
+            config: config
+          });
+          saveProfiles(profiles.slice(0, 20));
+          renderProfiles();
+          if (profileNameInput) profileNameInput.value = '';
+        });
+      }
+
+      if (exportConfigBtn) {
+        exportConfigBtn.addEventListener('click', function () {
+          const includeSecrets = includeSecretsInput ? includeSecretsInput.checked : false;
+          const config = collectConfig(includeSecrets);
+          const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'sbstck-dl-config.json';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          setProfileStatus('Config exported.', 'ok');
+        });
+      }
+
+      if (importConfigBtn && importConfigInput) {
+        importConfigBtn.addEventListener('click', function () {
+          importConfigInput.click();
+        });
+      }
+
+      if (importConfigInput) {
+        importConfigInput.addEventListener('change', function () {
+          const file = importConfigInput.files && importConfigInput.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = function () {
+            try {
+              const parsed = JSON.parse(reader.result);
+              applyConfigToForm(parsed);
+              setProfileStatus('Config imported.', 'ok');
+            } catch (err) {
+              setProfileStatus('Failed to import config: ' + err, 'bad');
+            }
+          };
+          reader.readAsText(file);
+          importConfigInput.value = '';
+        });
+      }
+
       function collectRerunPayload() {
         return {
           publication_url: (urlInput && !urlInput.disabled) ? urlInput.value.trim() : '',
@@ -1950,6 +2277,7 @@ const serveHTML = `<!DOCTYPE html>
 
       toggleAdvanced(false);
       setJobButtons(false);
+      renderProfiles();
       buildCommand();
       showStep(1);
     })();

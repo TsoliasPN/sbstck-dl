@@ -97,6 +97,7 @@ Flags:
 Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
       --before string   Download posts published before this date (format: YYYY-MM-DD)
+      --config string   Load options from a YAML/JSON config file
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
@@ -308,6 +309,7 @@ Flags:
 Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
       --before string   Download posts published before this date (format: YYYY-MM-DD)
+      --config string   Load options from a YAML/JSON config file
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
@@ -351,6 +353,7 @@ Flags:
 Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
       --before string   Download posts published before this date (format: YYYY-MM-DD)
+      --config string   Load options from a YAML/JSON config file
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
@@ -372,6 +375,7 @@ Inputs are validated for URL, proxy, and date formats with actionable error mess
 Use the Test connection step to fetch `sitemap.xml` and verify a private post URL with your cookie.
 Use the Dry-run preview step to see counts, date range, and download/skip totals before running.
 Use the Incremental sync view to check your last run, see new posts, and rerun quickly.
+Use Profiles and config to save presets locally or export/import a JSON config file for the CLI.
 From the Review step you can run a background download job with live progress, logs, retries, and cancel controls.
 The UI backend exposes local-only `/api/...` endpoints and protects POSTs with a CSRF token.
 
@@ -385,6 +389,7 @@ Flags:
 Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
       --before string   Download posts published before this date (format: YYYY-MM-DD)
+      --config string   Load options from a YAML/JSON config file
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
@@ -461,7 +466,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Add a dry-run preview screen: posts count, newest/oldest dates, and what will be downloaded/skipped
 - [x] (P2) Run downloads as background jobs with live progress (per post), logs, retry stats, and a Cancel button
 - [x] (P2) Add a “Rerun later”/incremental sync view (show last run, new posts since last run, run again)
-- [ ] (P2) Add profile management: save/load run presets and export/import a config file from the UI
+- [x] (P2) Add profile management: save/load run presets and export/import a config file from the UI
 - [ ] (P2) Improve secret handling in UI: don’t persist cookies by default; optional secure storage (OS keychain/credential manager)
 - [ ] (P2) Add `--open` to auto-open the browser when starting the UI, and print the URL for manual open
 - [ ] (P2) Bundle UI assets into the binary (Go `embed`) so the UI ships as a single executable
@@ -470,7 +475,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Add API-level tests (`httptest`) for the UI backend and keep `go test ./...` green
 
 #### P2 - Config, CLI & docs
-- [ ] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
+- [x] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
 - [ ] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
 - [ ] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)
 - [ ] (P2) Add `list --json` output; optionally add a metadata mode that also fetches title/date (rate-limited)

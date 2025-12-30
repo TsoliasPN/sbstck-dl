@@ -202,6 +202,7 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("cookie-val-file"))
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("cookie-jar"))
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("notion-labels"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("config"))
 	})
 
 	t.Run("download command flags", func(t *testing.T) {

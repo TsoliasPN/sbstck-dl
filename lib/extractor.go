@@ -283,6 +283,10 @@ type Archive struct {
 	Entries []ArchiveEntry
 }
 
+type notionLinksSidecar struct {
+	NotionLinks []string `json:"notion_links"`
+}
+
 // NewExtractor creates a new Extractor with the provided Fetcher.
 // If the Fetcher is nil, a default Fetcher will be used.
 func NewExtractor(f *Fetcher) *Extractor {
@@ -608,7 +612,9 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		}
 
 		notionCount := 0
-		if content, err := os.ReadFile(entry.FilePath); err == nil {
+		if links, ok := readNotionLinksSidecar(entry.FilePath); ok {
+			notionCount = len(links)
+		} else if content, err := os.ReadFile(entry.FilePath); err == nil {
 			format := strings.TrimPrefix(strings.ToLower(filepath.Ext(entry.FilePath)), ".")
 			if format == "" {
 				format = "html"
@@ -1173,4 +1179,28 @@ func (a *Archive) GenerateText(outputDir string) error {
 	}
 
 	return os.WriteFile(archivePath, []byte(content), 0644)
+}
+
+func readNotionLinksSidecar(outputPath string) ([]string, bool) {
+	path := metadataSidecarPath(outputPath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var meta notionLinksSidecar
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, false
+	}
+	if meta.NotionLinks == nil {
+		return nil, false
+	}
+	return meta.NotionLinks, true
+}
+
+func metadataSidecarPath(outputPath string) string {
+	ext := filepath.Ext(outputPath)
+	if ext == "" {
+		return outputPath + ".json"
+	}
+	return strings.TrimSuffix(outputPath, ext) + ".json"
 }

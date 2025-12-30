@@ -26,6 +26,7 @@ func TestWriteMetadataSidecar(t *testing.T) {
 		Title:        "Post Title",
 		CanonicalUrl: "https://example.substack.com/p/post",
 		PostDate:     "2023-01-01T00:00:00Z",
+		BodyHTML:     `<a href="https://www.notion.so/Workspace/Page-123?utm_source=x">Notion</a>`,
 	}
 	downloadedAt := time.Date(2023, time.January, 2, 3, 4, 5, 0, time.UTC)
 
@@ -46,5 +47,8 @@ func TestWriteMetadataSidecar(t *testing.T) {
 	}
 	if meta.LastModified != "2023-01-03" {
 		t.Fatalf("expected last_modified to be set, got %q", meta.LastModified)
+	}
+	if len(meta.NotionLinks) != 1 || meta.NotionLinks[0] != "https://notion.so/Workspace/Page-123" {
+		t.Fatalf("unexpected notion_links: %+v", meta.NotionLinks)
 	}
 }

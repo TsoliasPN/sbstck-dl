@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/alexferrari88/sbstck-dl/lib"
 )
 
 func TestNormalizeNotionURL(t *testing.T) {
@@ -56,5 +59,33 @@ func TestBuildNotionIndex(t *testing.T) {
 	}
 	if len(posts[0].Links) != 1 {
 		t.Fatalf("expected 1 link, got %d", len(posts[0].Links))
+	}
+}
+
+func TestBuildNotionIndexUsesSidecar(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "20230101_000000_post.html")
+	if err := os.WriteFile(path, []byte("<html><body><p>No links here.</p></body></html>"), 0644); err != nil {
+		t.Fatalf("write file failed: %v", err)
+	}
+
+	post := lib.Post{
+		Slug:         "post",
+		Title:        "Sidecar Post",
+		CanonicalUrl: "https://example.substack.com/p/post",
+		PostDate:     "2023-01-01T00:00:00Z",
+		BodyHTML:     `<a href="https://www.notion.so/Workspace/Page-123?utm_source=x">Notion</a>`,
+	}
+	writeMetadataSidecar(post, path, tempDir, "html", time.Now(), "")
+
+	posts, err := buildNotionIndex(tempDir, "html")
+	if err != nil {
+		t.Fatalf("buildNotionIndex error: %v", err)
+	}
+	if len(posts) != 1 {
+		t.Fatalf("expected 1 post, got %d", len(posts))
+	}
+	if len(posts[0].Links) != 1 || posts[0].Links[0] != "https://notion.so/Workspace/Page-123" {
+		t.Fatalf("unexpected links: %+v", posts[0].Links)
 	}
 }

@@ -565,18 +565,19 @@ func writeFailedURLs(outputFolder string, urls []string) (string, error) {
 }
 
 type postMetadata struct {
-	Title        string `json:"title"`
-	Subtitle     string `json:"subtitle,omitempty"`
-	Description  string `json:"description,omitempty"`
-	Slug         string `json:"slug"`
-	CanonicalURL string `json:"canonical_url"`
-	PostDate     string `json:"post_date"`
-	DownloadedAt string `json:"downloaded_at"`
-	WordCount    int    `json:"word_count,omitempty"`
-	CoverImage   string `json:"cover_image,omitempty"`
-	OutputPath   string `json:"output_path"`
-	Format       string `json:"format"`
-	LastModified string `json:"last_modified,omitempty"`
+	Title        string   `json:"title"`
+	Subtitle     string   `json:"subtitle,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Slug         string   `json:"slug"`
+	CanonicalURL string   `json:"canonical_url"`
+	PostDate     string   `json:"post_date"`
+	DownloadedAt string   `json:"downloaded_at"`
+	WordCount    int      `json:"word_count,omitempty"`
+	CoverImage   string   `json:"cover_image,omitempty"`
+	OutputPath   string   `json:"output_path"`
+	Format       string   `json:"format"`
+	LastModified string   `json:"last_modified,omitempty"`
+	NotionLinks  []string `json:"notion_links"`
 }
 
 func writeMetadataSidecar(post lib.Post, outputPath string, outputFolder string, format string, downloadedAt time.Time, lastModified string) {
@@ -600,6 +601,7 @@ func writeMetadataSidecar(post lib.Post, outputPath string, outputFolder string,
 		OutputPath:   relPath,
 		Format:       format,
 		LastModified: lastModified,
+		NotionLinks:  lib.ExtractNotionLinks(post.BodyHTML, "html"),
 	}
 
 	data, err := json.MarshalIndent(meta, "", "  ")

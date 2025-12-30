@@ -32,6 +32,7 @@ Available Commands:
   download    Download individual posts or the entire public archive
   help        Help about any command
   list        List the posts of a Substack
+  serve       Launch a local-only web UI
   version     Print the version number of sbstck-dl
 
 Flags:
@@ -363,6 +364,33 @@ Global Flags:
   -v, --verbose         Enable verbose output
 ```
 
+### Serving the UI
+
+The UI server binds to `127.0.0.1` only.
+
+```bash
+Usage:
+  sbstck-dl serve [flags]
+
+Flags:
+      --port int   Port to bind the local UI server (default 8787)
+
+Global Flags:
+      --after string    Download posts published after this date (format: YYYY-MM-DD)
+      --before string   Download posts published before this date (format: YYYY-MM-DD)
+      --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
+      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
+      --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
+      --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
+      --concurrency int  Alias for --max-workers
+      --log-format string  Log format (text or json) (default "text")
+      --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
+  -x, --proxy string    Specify the proxy url
+  -r, --rate int        Specify the rate of requests per second (default 2)
+  -v, --verbose         Enable verbose output
+```
+
 ```bash
 SBSTCK_COOKIE_VAL=COOKIE_VALUE sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 ```
@@ -418,7 +446,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
 
 #### P2 - UI (guided local web app)
-- [ ] (P2) Add a `serve` (or `ui`) command that launches a local-only web UI (bind `127.0.0.1`) for guided runs
+- [x] (P2) Add a `serve` (or `ui`) command that launches a local-only web UI (bind `127.0.0.1`) for guided runs
 - [ ] (P2) Build a step-by-step “wizard” flow with presets (Basic vs Advanced) that maps 1:1 to CLI flags
 - [ ] (P2) Add inline help/tooltips and recommended defaults (format, images/files, rate limits) for non-technical users
 - [ ] (P2) Validate inputs in the UI (URL/proxy/date formats) and provide actionable error messages

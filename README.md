@@ -217,6 +217,7 @@ Use the `--create-archive` flag to generate an organized index page that links a
 - Shows post descriptions/subtitles and cover images when available
 - Automatically sorts posts by publication date (newest first)
 - HTML archive includes search, sorting (newest/oldest/title), and date range filters
+- Extracts Notion links into `notion-links.html` and `notion-links.md` (deduped and grouped by post)
 - Works with both single post and bulk downloads
 
 **Examples:**
@@ -383,11 +384,11 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Optionally write per-post metadata sidecar (e.g. `post.json`) or Markdown front matter
 - [x] (P2) Add an `archive` command to regenerate `index.{format}` from existing downloads (no re-download)
 - [x] (P2) Add optional filtering/sorting options for the archive page (e.g. by date range, newest/oldest)
-- [ ] (P2) Extract and index Notion links across posts into a separate `notion-links.{html,md}` (deduped + grouped by post)
+- [x] (P2) Extract and index Notion links across posts into a separate `notion-links.{html,md}` (deduped + grouped by post)
 - [ ] (P2) Add a Notion badge/count in `index.html` for posts containing Notion links, with quick navigation to the links list
 - [ ] (P2) Persist extracted links in per-post metadata (sidecar JSON/front matter) to avoid re-parsing content on reruns
 - [ ] (P2) Add an index-by-domain view (Notion, Google Docs, GitHub, etc.) so Notion links become a one-click filter
-- [ ] (P2) Normalize/dedupe extracted Notion URLs (strip tracking params, canonicalize hosts/paths)
+- [x] (P2) Normalize/dedupe extracted Notion URLs (strip tracking params, canonicalize hosts/paths)
 - [ ] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
 
 #### P2 - UI (guided local web app)

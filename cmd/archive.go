@@ -61,6 +61,12 @@ var (
 			if verbose {
 				fmt.Printf("Archive page generated: %s/index.%s\n", archiveOutput, format)
 			}
+
+			if err := generateNotionIndex(archiveOutput, format); err != nil {
+				log.Printf("Error generating Notion links index: %v\n", err)
+			} else if verbose {
+				fmt.Printf("Notion links index generated: %s/%s, %s/%s\n", archiveOutput, notionLinksHTML, archiveOutput, notionLinksMD)
+			}
 		},
 	}
 )

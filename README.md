@@ -37,7 +37,8 @@ Flags:
       --after string             Download posts published after this date (format: YYYY-MM-DD)
       --before string            Download posts published before this date (format: YYYY-MM-DD)
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
-      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
+      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
+      --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
   -h, --help                     help for sbstck-dl
       --concurrency int          Alias for --max-workers
       --log-format string        Log format (text or json) (default "text")
@@ -89,7 +90,8 @@ Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
       --before string   Download posts published before this date (format: YYYY-MM-DD)
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
-      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
+      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
+      --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -273,7 +275,8 @@ Global Flags:
       --after string    Download posts published after this date (format: YYYY-MM-DD)
       --before string   Download posts published before this date (format: YYYY-MM-DD)
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
-      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
+      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
+      --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -288,11 +291,21 @@ In order to download the full text of private newsletters you need to provide th
 The cookie name is either `substack.sid` or `connect.sid`, based on your cookie.
 To get the cookie value you can use the developer tools of your browser.
 Once you have the cookie name and value, you can pass them to the downloader using the `--cookie_name` and `--cookie_val` flags.
+To avoid storing secrets in shell history, you can also set `SBSTCK_COOKIE_VAL` and omit `--cookie_val`.
+You can also read the cookie value from a file using `--cookie-val-file`.
 
 #### Example
 
 ```bash
 sbstck-dl download --url https://example.substack.com --cookie_name substack.sid --cookie_val COOKIE_VALUE
+```
+
+```bash
+SBSTCK_COOKIE_VAL=COOKIE_VALUE sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
+```
+
+```bash
+sbstck-dl download --url https://example.substack.com --cookie_name substack.sid --cookie-val-file path/to/cookie.txt
 ```
 
 ## Thanks
@@ -321,8 +334,8 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 - [x] (P1) Improve resume behavior across format/layout changes (based on manifest, not only slug matching)
 
 #### P1 — Private newsletters (auth + safety)
-- [ ] (P1) Support reading cookie value from an env var (avoid shell history)
-- [ ] (P1) Support reading cookie value from a file (e.g. `--cookie-val-file`)
+- [x] (P1) Support reading cookie value from an env var (avoid shell history)
+- [x] (P1) Support reading cookie value from a file (e.g. `--cookie-val-file`)
 - [ ] (P1) Support importing cookies from a Netscape cookie jar (optional)
 
 #### P2 - Output & archive UX

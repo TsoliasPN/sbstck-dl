@@ -348,6 +348,23 @@ func TestCookieName(t *testing.T) {
 	})
 }
 
+func TestResolveCookieValue(t *testing.T) {
+	t.Setenv(cookieValEnvVar, "env-cookie")
+	tempDir := t.TempDir()
+	path := tempDir + "/cookie.txt"
+	require.NoError(t, os.WriteFile(path, []byte("file-cookie\n"), 0644))
+
+	if got := resolveCookieValue("flag-cookie", path); got != "flag-cookie" {
+		t.Fatalf("expected flag to win, got %q", got)
+	}
+	if got := resolveCookieValue("", path); got != "file-cookie" {
+		t.Fatalf("expected file value, got %q", got)
+	}
+	if got := resolveCookieValue("", ""); got != "env-cookie" {
+		t.Fatalf("expected env value, got %q", got)
+	}
+}
+
 // Test that we can create paths and handle files correctly
 func TestFileHandling(t *testing.T) {
 	// Create a temporary directory for testing

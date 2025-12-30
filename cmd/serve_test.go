@@ -14,6 +14,17 @@ import (
 	"github.com/alexferrari88/sbstck-dl/lib"
 )
 
+func setTestCSRFToken() {
+	uiCSRFToken = "test-token"
+}
+
+func addCSRFHeader(req *http.Request) {
+	if uiCSRFToken == "" {
+		return
+	}
+	req.Header.Set("X-CSRF-Token", uiCSRFToken)
+}
+
 func TestServeUIRoot(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -68,6 +79,7 @@ type previewResponsePayload struct {
 }
 
 func TestServeTestConnectionSuccess(t *testing.T) {
+	setTestCSRFToken()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/sitemap.xml":
@@ -98,6 +110,7 @@ func TestServeTestConnectionSuccess(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/test-connection", bytes.NewReader(data))
+	addCSRFHeader(req)
 	rec := httptest.NewRecorder()
 
 	serveUIHandler().ServeHTTP(rec, req)
@@ -119,6 +132,7 @@ func TestServeTestConnectionSuccess(t *testing.T) {
 }
 
 func TestServeTestConnectionInvalidURL(t *testing.T) {
+	setTestCSRFToken()
 	payload := map[string]string{
 		"publication_url": "",
 	}
@@ -128,6 +142,7 @@ func TestServeTestConnectionInvalidURL(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/test-connection", bytes.NewReader(data))
+	addCSRFHeader(req)
 	rec := httptest.NewRecorder()
 
 	serveUIHandler().ServeHTTP(rec, req)
@@ -145,6 +160,7 @@ func TestServeTestConnectionInvalidURL(t *testing.T) {
 }
 
 func TestServePreviewCounts(t *testing.T) {
+	setTestCSRFToken()
 	var upstream *httptest.Server
 	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/sitemap.xml" {
@@ -191,6 +207,7 @@ func TestServePreviewCounts(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/preview", bytes.NewReader(data))
+	addCSRFHeader(req)
 	rec := httptest.NewRecorder()
 	serveUIHandler().ServeHTTP(rec, req)
 
@@ -210,5 +227,176 @@ func TestServePreviewCounts(t *testing.T) {
 	}
 	if resp.OldestDate != "2023-01-01" || resp.NewestDate != "2023-02-01" {
 		t.Fatalf("unexpected dates: %+v", resp)
+	}
+}
+
+func TestServeJobLifecycleDryRun(t *testing.T) {
+	setTestCSRFToken()
+	uiJobs = newJobManager()
+
+	var upstream *httptest.Server
+	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/sitemap.xml" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>` + upstream.URL + `/p/first</loc>
+    <lastmod>2023-01-01</lastmod>
+  </url>
+  <url>
+    <loc>` + upstream.URL + `/p/second</loc>
+    <lastmod>2023-02-01</lastmod>
+  </url>
+</urlset>`))
+	}))
+	defer upstream.Close()
+
+	payload := map[string]any{
+		"url":         upstream.URL,
+		"output":      t.TempDir(),
+		"format":      "html",
+		"dry_run":     true,
+		"rate":        "1",
+		"max_workers": "1",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/jobs/start", bytes.NewReader(data))
+	addCSRFHeader(req)
+	rec := httptest.NewRecorder()
+	serveUIHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var startResp jobStartResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &startResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if startResp.ID == "" {
+		t.Fatalf("expected job id")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/jobs", nil)
+	rec = httptest.NewRecorder()
+	serveUIHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	var listResp jobListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(listResp.Jobs) == 0 || listResp.Jobs[0].ID == "" {
+		t.Fatalf("expected jobs in list response")
+	}
+
+	var status jobStatusResponse
+	for i := 0; i < 50; i++ {
+		req = httptest.NewRequest(http.MethodGet, "/api/jobs/"+startResp.ID, nil)
+		rec = httptest.NewRecorder()
+		serveUIHandler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if status.Status != jobRunning {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if status.Status != jobComplete {
+		t.Fatalf("expected completed job, got %+v", status)
+	}
+	if status.Total != 2 || status.Skipped != 2 {
+		t.Fatalf("unexpected counts: %+v", status)
+	}
+}
+
+func TestServeJobCancel(t *testing.T) {
+	setTestCSRFToken()
+	uiJobs = newJobManager()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/sitemap.xml" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(2 * time.Second):
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`))
+		}
+	}))
+	defer upstream.Close()
+
+	payload := map[string]any{
+		"url":         upstream.URL,
+		"output":      t.TempDir(),
+		"format":      "html",
+		"dry_run":     true,
+		"rate":        "1",
+		"max_workers": "1",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/jobs/start", bytes.NewReader(data))
+	addCSRFHeader(req)
+	rec := httptest.NewRecorder()
+	serveUIHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var startResp jobStartResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &startResp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if startResp.ID == "" {
+		t.Fatalf("expected job id")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/jobs/"+startResp.ID+"/cancel", bytes.NewReader([]byte(`{}`)))
+	addCSRFHeader(req)
+	rec = httptest.NewRecorder()
+	serveUIHandler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var status jobStatusResponse
+	for i := 0; i < 50; i++ {
+		req = httptest.NewRequest(http.MethodGet, "/api/jobs/"+startResp.ID, nil)
+		rec = httptest.NewRecorder()
+		serveUIHandler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d", rec.Code)
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if status.Status != jobRunning {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if status.Status != jobCanceled {
+		t.Fatalf("expected canceled job, got %+v", status)
 	}
 }

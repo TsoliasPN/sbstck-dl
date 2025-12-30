@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,13 +19,17 @@ import (
 )
 
 var (
-	servePort int
-	serveCmd  = &cobra.Command{
+	servePort   int
+	uiCSRFToken string
+	serveCmd    = &cobra.Command{
 		Use:   "serve",
 		Short: "Launch a local-only web UI",
 		Run: func(cmd *cobra.Command, args []string) {
 			if servePort < 1 || servePort > 65535 {
 				log.Fatalf("invalid --port %d (must be 1-65535)", servePort)
+			}
+			if uiCSRFToken == "" {
+				uiCSRFToken = generateCSRFToken()
 			}
 			addr := fmt.Sprintf("127.0.0.1:%d", servePort)
 			server := &http.Server{
@@ -48,6 +54,8 @@ func serveUIHandler() http.Handler {
 	mux.HandleFunc("/", serveUIRoot)
 	mux.HandleFunc("/api/test-connection", serveTestConnection)
 	mux.HandleFunc("/api/preview", servePreview)
+	mux.HandleFunc("/api/jobs", serveJobs)
+	mux.HandleFunc("/api/jobs/", serveJobs)
 	return mux
 }
 
@@ -57,7 +65,8 @@ func serveUIRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, serveHTML)
+	page := strings.ReplaceAll(serveHTML, "{{CSRF_TOKEN}}", uiCSRFToken)
+	fmt.Fprint(w, page)
 }
 
 type testConnectionRequest struct {
@@ -117,6 +126,9 @@ type previewResponse struct {
 func serveTestConnection(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireCSRF(w, r) {
 		return
 	}
 
@@ -205,6 +217,9 @@ func serveTestConnection(w http.ResponseWriter, r *http.Request) {
 func servePreview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireCSRF(w, r) {
 		return
 	}
 
@@ -451,11 +466,32 @@ func summarizeEntryDates(entries []lib.SitemapEntry) (string, string) {
 	return oldestStr, newestStr
 }
 
+func generateCSRFToken() string {
+	seed := make([]byte, 24)
+	if _, err := rand.Read(seed); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return base64.RawURLEncoding.EncodeToString(seed)
+}
+
+func requireCSRF(w http.ResponseWriter, r *http.Request) bool {
+	if uiCSRFToken == "" {
+		return true
+	}
+	token := r.Header.Get("X-CSRF-Token")
+	if token == "" || token != uiCSRFToken {
+		w.WriteHeader(http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
 const serveHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{CSRF_TOKEN}}">
   <title>Substack Downloader Wizard</title>
   <style>
     :root {
@@ -628,6 +664,62 @@ const serveHTML = `<!DOCTYPE html>
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
+    .job-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .job-box {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px;
+      background: #ffffff;
+      display: grid;
+      gap: 8px;
+      min-height: 160px;
+    }
+    .job-box > span {
+      font-size: 11px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .job-list {
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      font-size: 12px;
+      color: var(--ink);
+    }
+    .job-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: #f8fafc;
+      display: grid;
+      gap: 4px;
+    }
+    .job-item .job-time {
+      font-size: 10px;
+      color: #64748b;
+    }
+    .job-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid #e2e8f0;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      width: fit-content;
+    }
+    .job-tag.completed { border-color: #86efac; color: #166534; background: #dcfce7; }
+    .job-tag.failed { border-color: #fca5a5; color: #b91c1c; background: #fee2e2; }
+    .job-tag.running { border-color: #fde68a; color: #92400e; background: #ffedd5; }
+    .job-tag.skipped { border-color: #cbd5f5; color: #1d4ed8; background: #e0e7ff; }
     .field.invalid input,
     .field.invalid select,
     .field.invalid textarea {
@@ -1058,6 +1150,34 @@ const serveHTML = `<!DOCTYPE html>
                 </div>
               </div>
             </div>
+            <div class="group">
+              <h3>Background job</h3>
+              <p class="small">Run the download in the background with live progress and logs.</p>
+              <div class="review-actions">
+                <button type="button" id="startJobBtn" class="primary">Start download</button>
+                <button type="button" id="cancelJobBtn">Cancel</button>
+              </div>
+              <div id="jobStatus" class="test-status">No job running.</div>
+              <div id="jobMetrics" class="preview-card" hidden>
+                <div class="preview-grid">
+                  <div class="preview-tile"><span>Total</span><strong id="jobTotal">0</strong></div>
+                  <div class="preview-tile"><span>Downloaded</span><strong id="jobDownloaded">0</strong></div>
+                  <div class="preview-tile"><span>Skipped</span><strong id="jobSkipped">0</strong></div>
+                  <div class="preview-tile"><span>Failed</span><strong id="jobFailed">0</strong></div>
+                  <div class="preview-tile"><span>Retries</span><strong id="jobRetries">0</strong></div>
+                </div>
+                <div class="job-grid">
+                  <div class="job-box">
+                    <span>Logs</span>
+                    <div id="jobLogs" class="job-list"></div>
+                  </div>
+                  <div class="job-box">
+                    <span>Posts</span>
+                    <div id="jobPosts" class="job-list"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </form>
@@ -1085,6 +1205,8 @@ const serveHTML = `<!DOCTYPE html>
       const copyStatus = document.getElementById('copyStatus');
       const reviewStatus = document.getElementById('reviewStatus');
       const errorList = document.getElementById('validationErrors');
+      const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+      const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : '';
       const presetInputs = Array.from(document.querySelectorAll('input[name="preset"]'));
       const advancedGroups = Array.from(document.querySelectorAll('[data-advanced="true"]'));
       const errorTargets = {};
@@ -1107,12 +1229,39 @@ const serveHTML = `<!DOCTYPE html>
       const previewRefreshed = document.getElementById('previewRefreshed');
       const previewOldest = document.getElementById('previewOldest');
       const previewNewest = document.getElementById('previewNewest');
+      const startJobBtn = document.getElementById('startJobBtn');
+      const cancelJobBtn = document.getElementById('cancelJobBtn');
+      const jobStatus = document.getElementById('jobStatus');
+      const jobMetrics = document.getElementById('jobMetrics');
+      const jobTotal = document.getElementById('jobTotal');
+      const jobDownloaded = document.getElementById('jobDownloaded');
+      const jobSkipped = document.getElementById('jobSkipped');
+      const jobFailed = document.getElementById('jobFailed');
+      const jobRetries = document.getElementById('jobRetries');
+      const jobLogs = document.getElementById('jobLogs');
+      const jobPosts = document.getElementById('jobPosts');
       const cookieNameInput = document.getElementById('cookieName');
       const cookieValInput = document.getElementById('cookieVal');
       const cookieValFileInput = document.getElementById('cookieValFile');
       const cookieJarInput = document.getElementById('cookieJar');
       let currentStep = 1;
       let activePreset = 'basic';
+      let activeJobId = '';
+      let jobPollTimer = null;
+
+      function apiFetch(path, payload) {
+        const options = {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken || ''
+          },
+        };
+        if (payload !== undefined) {
+          options.body = JSON.stringify(payload);
+        }
+        return fetch(path, options);
+      }
 
       function showStep(step) {
         currentStep = step;
@@ -1351,11 +1500,7 @@ const serveHTML = `<!DOCTYPE html>
             testStatus.className = 'test-status';
           }
 
-          fetch('/api/test-connection', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          }).then(res => res.json()).then(data => {
+          apiFetch('/api/test-connection', payload).then(res => res.json()).then(data => {
             if (!testStatus) return;
             const parts = [];
             if (data.sitemap_ok) {
@@ -1431,11 +1576,7 @@ const serveHTML = `<!DOCTYPE html>
             previewResults.hidden = true;
           }
 
-          fetch('/api/preview', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          }).then(res => res.json()).then(data => {
+          apiFetch('/api/preview', payload).then(res => res.json()).then(data => {
             if (!previewStatus) return;
             if (data.ok) {
               previewStatus.textContent = 'Preview ready.';
@@ -1461,7 +1602,244 @@ const serveHTML = `<!DOCTYPE html>
         });
       }
 
+      function readValue(id) {
+        const el = document.getElementById(id);
+        if (!el || el.disabled) return '';
+        return (el.value || '').trim();
+      }
+
+      function readChecked(id) {
+        const el = document.getElementById(id);
+        if (!el || el.disabled) return false;
+        return Boolean(el.checked);
+      }
+
+      function setJobButtons(running) {
+        if (startJobBtn) startJobBtn.disabled = running;
+        if (cancelJobBtn) cancelJobBtn.disabled = !running;
+      }
+
+      function setJobStatus(message, state) {
+        if (!jobStatus) return;
+        jobStatus.textContent = message;
+        let klass = 'test-status';
+        if (state === 'ok') {
+          klass += ' ok';
+        } else if (state === 'bad') {
+          klass += ' bad';
+        }
+        jobStatus.className = klass;
+      }
+
+      function renderJobLogs(logs) {
+        if (!jobLogs) return;
+        jobLogs.innerHTML = '';
+        if (!logs || logs.length === 0) {
+          jobLogs.textContent = 'No logs yet.';
+          return;
+        }
+        logs.slice(-50).forEach(entry => {
+          const item = document.createElement('div');
+          item.className = 'job-item';
+          const time = document.createElement('div');
+          time.className = 'job-time';
+          time.textContent = entry.time || '';
+          const message = document.createElement('div');
+          message.textContent = entry.message || '';
+          item.appendChild(time);
+          item.appendChild(message);
+          jobLogs.appendChild(item);
+        });
+      }
+
+      function renderJobPosts(posts) {
+        if (!jobPosts) return;
+        jobPosts.innerHTML = '';
+        if (!posts || posts.length === 0) {
+          jobPosts.textContent = 'No posts yet.';
+          return;
+        }
+        posts.slice(-50).forEach(post => {
+          const item = document.createElement('div');
+          item.className = 'job-item';
+          const tag = document.createElement('span');
+          const status = post.status || 'unknown';
+          tag.className = 'job-tag ' + status;
+          tag.textContent = status;
+          const title = document.createElement('div');
+          title.textContent = post.title || post.url || 'Post';
+          item.appendChild(tag);
+          item.appendChild(title);
+          if (post.path) {
+            const path = document.createElement('div');
+            path.className = 'job-time';
+            path.textContent = post.path;
+            item.appendChild(path);
+          }
+          if (post.error) {
+            const err = document.createElement('div');
+            err.className = 'job-time';
+            err.textContent = post.error;
+            item.appendChild(err);
+          }
+          jobPosts.appendChild(item);
+        });
+      }
+
+      function updateJobUI(data) {
+        if (!data) return;
+        if (jobMetrics) jobMetrics.hidden = false;
+        if (jobTotal) jobTotal.textContent = String(data.total || 0);
+        if (jobDownloaded) jobDownloaded.textContent = String(data.downloaded || 0);
+        if (jobSkipped) jobSkipped.textContent = String(data.skipped || 0);
+        if (jobFailed) jobFailed.textContent = String(data.failed || 0);
+        if (jobRetries) jobRetries.textContent = String(data.retries || 0);
+        renderJobLogs(data.logs);
+        renderJobPosts(data.posts);
+
+        if (data.status === 'running') {
+          setJobStatus('Running download...', '');
+          setJobButtons(true);
+          return;
+        }
+        if (data.status === 'completed') {
+          setJobStatus('Download complete.', 'ok');
+          setJobButtons(false);
+        } else if (data.status === 'failed') {
+          setJobStatus('Download failed.', 'bad');
+          setJobButtons(false);
+        } else if (data.status === 'canceled') {
+          setJobStatus('Download canceled.', 'bad');
+          setJobButtons(false);
+        } else {
+          setJobStatus('Status: ' + data.status, '');
+          setJobButtons(false);
+        }
+      }
+
+      function stopJobPolling() {
+        if (jobPollTimer) {
+          clearInterval(jobPollTimer);
+          jobPollTimer = null;
+        }
+      }
+
+      function startJobPolling(jobId) {
+        stopJobPolling();
+        const poll = function () {
+          fetch('/api/jobs/' + jobId).then(res => res.json()).then(data => {
+            if (data && data.error) {
+              setJobStatus(data.error, 'bad');
+              stopJobPolling();
+              setJobButtons(false);
+              return;
+            }
+            updateJobUI(data);
+            if (data && data.status && data.status !== 'running') {
+              stopJobPolling();
+            }
+          }).catch(err => {
+            setJobStatus('Failed to fetch job status: ' + err, 'bad');
+            stopJobPolling();
+            setJobButtons(false);
+          });
+        };
+        poll();
+        jobPollTimer = setInterval(poll, 1500);
+      }
+
+      function collectJobPayload() {
+        return {
+          url: (urlInput && !urlInput.disabled) ? urlInput.value.trim() : '',
+          output: readValue('output'),
+          format: readValue('format'),
+          add_source_url: readChecked('addSourceUrl'),
+          create_archive: readChecked('createArchive'),
+          download_images: readChecked('downloadImages'),
+          image_quality: readValue('imageQuality'),
+          images_dir: readValue('imagesDir'),
+          download_files: readChecked('downloadFiles'),
+          file_extensions: readValue('fileExtensions'),
+          files_dir: readValue('filesDir'),
+          dry_run: readChecked('dryRun'),
+          force: readChecked('forceDownload'),
+          skip_existing: readChecked('skipExisting'),
+          refresh_updated: readChecked('refreshUpdated'),
+          layout: readValue('layout'),
+          write_metadata: readChecked('writeMetadata'),
+          fail_fast: readChecked('failFast'),
+          continue_on_error: readChecked('continueOnError'),
+          after: readValue('afterDate'),
+          before: readValue('beforeDate'),
+          rate: readValue('rate'),
+          max_workers: readValue('maxWorkers'),
+          proxy: (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : '',
+          cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
+          cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
+          cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
+          cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+          notion_labels: readValue('notionLabels'),
+          verbose: readChecked('verbose')
+        };
+      }
+
+      if (startJobBtn) {
+        startJobBtn.addEventListener('click', function () {
+          const errors = validateAndRender();
+          const urlValue = (urlInput ? urlInput.value : '').trim();
+          if (errors.length) {
+            setJobStatus('Fix the highlighted fields before starting.', 'bad');
+            return;
+          }
+          if (!urlValue) {
+            setJobStatus('Add a Substack URL before starting.', 'bad');
+            return;
+          }
+
+          setJobStatus('Starting download...', '');
+          setJobButtons(true);
+          if (jobLogs) jobLogs.innerHTML = '';
+          if (jobPosts) jobPosts.innerHTML = '';
+          if (jobMetrics) jobMetrics.hidden = false;
+
+          const payload = collectJobPayload();
+          apiFetch('/api/jobs/start', payload).then(res => res.json()).then(data => {
+            if (data && data.error) {
+              setJobStatus(data.error, 'bad');
+              setJobButtons(false);
+              return;
+            }
+            activeJobId = data.id || '';
+            if (!activeJobId) {
+              setJobStatus('Failed to start job.', 'bad');
+              setJobButtons(false);
+              return;
+            }
+            setJobStatus('Download started.', '');
+            startJobPolling(activeJobId);
+          }).catch(err => {
+            setJobStatus('Failed to start job: ' + err, 'bad');
+            setJobButtons(false);
+          });
+        });
+      }
+
+      if (cancelJobBtn) {
+        cancelJobBtn.addEventListener('click', function () {
+          if (!activeJobId) {
+            setJobStatus('No job running.', 'bad');
+            return;
+          }
+          apiFetch('/api/jobs/' + activeJobId + '/cancel', {}).then(res => res.json()).then(() => {
+            setJobStatus('Cancel requested...', '');
+          }).catch(err => {
+            setJobStatus('Failed to cancel: ' + err, 'bad');
+          });
+        });
+      }
+
       toggleAdvanced(false);
+      setJobButtons(false);
       buildCommand();
       showStep(1);
     })();

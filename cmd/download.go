@@ -639,6 +639,19 @@ func sidecarPath(outputPath string) string {
 	return strings.TrimSuffix(outputPath, ext) + ".json"
 }
 
+func readMetadataSidecar(outputPath string) (postMetadata, bool) {
+	path := sidecarPath(outputPath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return postMetadata{}, false
+	}
+	var meta postMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return postMetadata{}, false
+	}
+	return meta, true
+}
+
 func normalizeLayout(value string) string {
 	trimmed := strings.TrimSpace(strings.ToLower(value))
 	if trimmed == "" {

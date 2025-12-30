@@ -161,6 +161,7 @@ func init() {
 
 	rootCmd.AddCommand(downloadCmd)
 	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(archiveCmd)
 	rootCmd.AddCommand(versionCmd)
 }
 

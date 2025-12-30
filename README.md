@@ -40,6 +40,7 @@ Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
   -h, --help                     help for sbstck-dl
       --concurrency int          Alias for --max-workers
+      --log-format string        Log format (text or json) (default "text")
       --max-workers int          Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
   -x, --proxy string             Specify the proxy url
   -r, --rate int                 Specify the rate of requests per second (default 2)
@@ -57,6 +58,7 @@ By providing the main URL of a Substack, the downloader will download all the po
 When downloading the full archive, if the downloader is interrupted, at the next execution it will resume the download of the remaining posts.
 A `manifest.json` file is written in the output directory with canonical URLs, local paths, download times, and content hashes.
 On reruns, URLs already recorded in the manifest (with matching format and existing file) are skipped.
+If any posts fail to download, a `failed-urls.txt` file is written in the output directory for retrying later.
 
 ```bash
 Usage:
@@ -67,6 +69,7 @@ Flags:
       --create-archive         Create an archive index page linking all downloaded posts
       --download-files         Download file attachments locally and update content to reference local files
       --download-images        Download images locally and update content to reference local files
+      --fail-fast             Stop the download on the first error
   -d, --dry-run                Enable dry run
       --file-extensions string Comma-separated list of file extensions to download (e.g., 'pdf,docx,txt'). If empty, downloads all file types
       --files-dir string       Directory name for downloaded file attachments (default "files")
@@ -75,6 +78,7 @@ Flags:
       --image-quality string   Image quality to download (options: "high", "medium", "low") (default "high")
       --images-dir string      Directory name for downloaded images (default "images")
   -o, --output string          Specify the download directory (default ".")
+      --continue-on-error      Continue downloading after errors (default)
   -u, --url string             Specify the Substack url
 
 Global Flags:
@@ -83,6 +87,7 @@ Global Flags:
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
       --concurrency int  Alias for --max-workers
+      --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
   -x, --proxy string    Specify the proxy url
   -r, --rate int        Specify the rate of requests per second (default 2)
@@ -266,6 +271,7 @@ Global Flags:
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
       --concurrency int  Alias for --max-workers
+      --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
   -x, --proxy string    Specify the proxy url
   -r, --rate int        Specify the rate of requests per second (default 2)
@@ -301,9 +307,9 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 #### P1 — Performance & robustness
 - [x] (P1) Speed up incremental reruns: avoid per-URL `Glob` scanning; pre-index existing downloads once
 - [x] (P1) Add `--concurrency/--max-workers` to control parallelism (and document how it interacts with `--rate`)
-- [ ] (P1) Add structured logs and a summary report (downloaded/skipped/failed)
-- [ ] (P1) Write a "failed URLs" file for retrying later
-- [ ] (P1) Add `--fail-fast` / `--continue-on-error` behavior switches
+- [x] (P1) Add structured logs and a summary report (downloaded/skipped/failed)
+- [x] (P1) Write a "failed URLs" file for retrying later
+- [x] (P1) Add `--fail-fast` / `--continue-on-error` behavior switches
 
 #### P1 — Incremental controls & updates
 - [ ] (P1) Add `--force` / `--skip-existing` switches (redownload/overwrite vs incremental)

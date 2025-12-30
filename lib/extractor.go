@@ -433,6 +433,7 @@ func (e *Extractor) GetAllPostsURLs(ctx context.Context, pubUrl string, f DateFi
 }
 
 type ExtractResult struct {
+	Url  string
 	Post Post
 	Err  error
 }
@@ -479,7 +480,7 @@ func (e *Extractor) ExtractAllPosts(ctx context.Context, urls []string) <-chan E
 						return
 					default:
 						post, err := e.ExtractPost(ctx, url)
-						resultCh <- ExtractResult{Post: post, Err: err}
+						resultCh <- ExtractResult{Url: url, Post: post, Err: err}
 					}
 				}
 			}()

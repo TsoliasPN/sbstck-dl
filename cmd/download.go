@@ -28,17 +28,94 @@ var (
 	fileExtensions string
 	filesDir       string
 	createArchive  bool
+	failFast       bool
+	continueOnErr  bool
+	failedURLsFile = "failed-urls.txt"
 	downloadCmd    = &cobra.Command{
 		Use:   "download",
 		Short: "Download individual posts or the entire public archive",
 		Long:  `You can provide the url of a single post or the main url of the Substack you want to download.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			startTime := time.Now()
+			mode := "archive"
+			if strings.Contains(downloadUrl, "/p/") {
+				mode = "single"
+			}
+			summary := downloadSummary{Mode: mode}
+			failedURLs := make([]string, 0)
+			failedURLSet := make(map[string]struct{})
+			failFastMode := failFast
+			if continueOnErr {
+				failFastMode = false
+			}
+			recordFailedURL := func(url string) {
+				if url == "" {
+					return
+				}
+				if _, exists := failedURLSet[url]; exists {
+					return
+				}
+				failedURLSet[url] = struct{}{}
+				failedURLs = append(failedURLs, url)
+			}
+			finalize := func() {
+				logSummary(summary)
+				if len(failedURLs) == 0 {
+					return
+				}
+				path, err := writeFailedURLs(outputFolder, failedURLs)
+				if err != nil {
+					if logFormat == logFormatJSON {
+						logEvent("failed_urls.write_failed", map[string]any{
+							"path":  path,
+							"error": err.Error(),
+						})
+					} else {
+						log.Printf("Error writing failed URLs file: %v\n", err)
+					}
+					return
+				}
+				if logFormat == logFormatJSON {
+					logEvent("failed_urls.written", map[string]any{
+						"path":  path,
+						"count": len(failedURLs),
+					})
+				} else {
+					fmt.Printf("Failed URLs saved to %s\n", path)
+				}
+			}
+			abort := func(message string) {
+				if logFormat == logFormatJSON {
+					logEvent("download.aborted", map[string]any{
+						"reason": message,
+					})
+				}
+				finalize()
+				if logFormat == logFormatJSON {
+					os.Exit(1)
+				}
+				log.Fatalln(message)
+			}
+
+			logEvent("download.start", map[string]any{
+				"mode":    mode,
+				"url":     downloadUrl,
+				"format":  format,
+				"output":  outputFolder,
+				"dry_run": dryRun,
+			})
 
 			manifestPath := filepath.Join(outputFolder, lib.ManifestFilename)
 			manifest, err := lib.LoadManifest(manifestPath)
 			if err != nil {
-				log.Printf("Error loading manifest: %v\n", err)
+				if logFormat == logFormatJSON {
+					logEvent("manifest.load_failed", map[string]any{
+						"path":  manifestPath,
+						"error": err.Error(),
+					})
+				} else {
+					log.Printf("Error loading manifest: %v\n", err)
+				}
 				manifest = lib.NewManifest()
 			}
 
@@ -49,16 +126,37 @@ var (
 				canonicalURL := post.CanonicalUrl
 				if canonicalURL == "" {
 					if verbose {
-						log.Printf("Skipping manifest entry for %s: missing canonical URL\n", post.Slug)
+						if logFormat == logFormatJSON {
+							logEvent("manifest.skipped", map[string]any{
+								"slug":   post.Slug,
+								"reason": "missing canonical URL",
+							})
+						} else {
+							log.Printf("Skipping manifest entry for %s: missing canonical URL\n", post.Slug)
+						}
 					}
 					return
 				}
 				if err := manifest.UpdateEntry(canonicalURL, path, outputFolder, format, downloadedAt); err != nil {
-					log.Printf("Error updating manifest for %s: %v\n", canonicalURL, err)
+					if logFormat == logFormatJSON {
+						logEvent("manifest.update_failed", map[string]any{
+							"url":   canonicalURL,
+							"error": err.Error(),
+						})
+					} else {
+						log.Printf("Error updating manifest for %s: %v\n", canonicalURL, err)
+					}
 					return
 				}
 				if err := manifest.Save(manifestPath); err != nil {
-					log.Printf("Error saving manifest: %v\n", err)
+					if logFormat == logFormatJSON {
+						logEvent("manifest.save_failed", map[string]any{
+							"path":  manifestPath,
+							"error": err.Error(),
+						})
+					} else {
+						log.Printf("Error saving manifest: %v\n", err)
+					}
 				}
 			}
 
@@ -74,6 +172,12 @@ var (
 					fmt.Printf("Downloading post %s\n", downloadUrl)
 				}
 				if dryRun {
+					summary.Skipped = 1
+					logEvent("download.skipped", map[string]any{
+						"url":    downloadUrl,
+						"reason": "dry-run",
+					})
+					finalize()
 					fmt.Println("Dry run, exiting...")
 					return
 				}
@@ -83,6 +187,13 @@ var (
 
 				post, err := extractor.ExtractPost(ctx, downloadUrl)
 				if err != nil {
+					summary.Failed = 1
+					recordFailedURL(downloadUrl)
+					logEvent("download.failed", map[string]any{
+						"url":   downloadUrl,
+						"error": err.Error(),
+					})
+					finalize()
 					log.Fatalln(err)
 				}
 				downloadTime := time.Since(startTime)
@@ -106,19 +217,43 @@ var (
 					imageResult, err := post.WriteToFileWithImages(ctx, path, format, addSourceURL, downloadImages, imageQualityEnum, imagesDir, downloadFiles, fileExtensionsSlice, filesDir, fetcher)
 					writeErr = err
 					if writeErr != nil {
-						log.Printf("Error writing file %s: %v\n", path, writeErr)
+						if logFormat != logFormatJSON {
+							log.Printf("Error writing file %s: %v\n", path, writeErr)
+						}
 					} else if verbose && imageResult.Success > 0 {
 						fmt.Printf("Downloaded %d images (%d failed) for post %s\n", imageResult.Success, imageResult.Failed, post.Slug)
 					}
 				} else {
 					writeErr = post.WriteToFile(path, format, addSourceURL)
 					if writeErr != nil {
-						log.Printf("Error writing file %s: %v\n", path, writeErr)
+						if logFormat != logFormatJSON {
+							log.Printf("Error writing file %s: %v\n", path, writeErr)
+						}
 					}
 				}
 
 				if writeErr == nil {
+					summary.Downloaded = 1
+					logEvent("download.completed", map[string]any{
+						"url":  post.CanonicalUrl,
+						"path": path,
+					})
 					updateManifest(post, path, time.Now())
+				} else {
+					summary.Failed = 1
+					if post.CanonicalUrl != "" {
+						recordFailedURL(post.CanonicalUrl)
+					} else {
+						recordFailedURL(downloadUrl)
+					}
+					logEvent("download.failed", map[string]any{
+						"url":   post.CanonicalUrl,
+						"path":  path,
+						"error": writeErr.Error(),
+					})
+					if failFastMode {
+						abort("Stopping due to --fail-fast")
+					}
 				}
 
 				// Add to archive if enabled
@@ -129,25 +264,38 @@ var (
 				if verbose {
 					fmt.Println("Done in ", time.Since(startTime))
 				}
+				finalize()
 			} else {
 				// we are downloading the entire archive
-				var downloadedPostsCount int
 				dateFilterfunc := makeDateFilterFunc(beforeDate, afterDate)
 				urls, err := extractor.GetAllPostsURLs(ctx, downloadUrl, dateFilterfunc)
 				urlsCount := len(urls)
 				if err != nil {
+					summary.Failed = 1
+					logEvent("download.failed", map[string]any{
+						"url":   downloadUrl,
+						"error": err.Error(),
+					})
+					finalize()
 					log.Fatalln(err)
 				}
 				if urlsCount == 0 {
 					if verbose {
 						fmt.Println("No posts found, exiting...")
 					}
+					finalize()
 					return
 				}
 				if verbose {
 					fmt.Printf("Found %d posts\n", urlsCount)
 				}
 				if dryRun {
+					summary.Skipped = urlsCount
+					logEvent("download.skipped", map[string]any{
+						"reason": "dry-run",
+						"count":  urlsCount,
+					})
+					finalize()
 					fmt.Printf("Found %d posts\n", urlsCount)
 					fmt.Println("Dry run, exiting...")
 					return
@@ -158,10 +306,18 @@ var (
 						fmt.Println("Error filtering existing posts:", err)
 					}
 				}
+				skippedExisting := urlsCount - len(urls)
+				if skippedExisting > 0 {
+					summary.Skipped += skippedExisting
+					logEvent("download.skipped_existing", map[string]any{
+						"count": skippedExisting,
+					})
+				}
 				if len(urls) == 0 {
 					if verbose {
 						fmt.Println("No new posts found, exiting...")
 					}
+					finalize()
 					return
 				}
 				bar := progressbar.NewOptions(len(urls),
@@ -175,14 +331,22 @@ var (
 					default:
 					}
 					if result.Err != nil {
+						summary.Failed++
+						recordFailedURL(result.Url)
+						logEvent("download.failed", map[string]any{
+							"url":   result.Url,
+							"error": result.Err.Error(),
+						})
 						if verbose {
 							fmt.Printf("Error downloading post %s: %s\n", result.Post.CanonicalUrl, result.Err)
 							fmt.Println("Skipping...")
 						}
+						if failFastMode {
+							abort("Stopping due to --fail-fast")
+						}
 						continue
 					}
 					bar.Add(1)
-					downloadedPostsCount++
 					if verbose {
 						fmt.Printf("Downloading post %s\n", result.Post.CanonicalUrl)
 					}
@@ -204,19 +368,43 @@ var (
 						imageResult, err := post.WriteToFileWithImages(ctx, path, format, addSourceURL, downloadImages, imageQualityEnum, imagesDir, downloadFiles, fileExtensionsSlice, filesDir, fetcher)
 						writeErr = err
 						if writeErr != nil {
-							log.Printf("Error writing file %s: %v\n", path, writeErr)
+							if logFormat != logFormatJSON {
+								log.Printf("Error writing file %s: %v\n", path, writeErr)
+							}
 						} else if verbose && imageResult.Success > 0 {
 							fmt.Printf("Downloaded %d images (%d failed) for post %s\n", imageResult.Success, imageResult.Failed, post.Slug)
 						}
 					} else {
 						writeErr = post.WriteToFile(path, format, addSourceURL)
 						if writeErr != nil {
-							log.Printf("Error writing file %s: %v\n", path, writeErr)
+							if logFormat != logFormatJSON {
+								log.Printf("Error writing file %s: %v\n", path, writeErr)
+							}
 						}
 					}
 
 					if writeErr == nil {
+						summary.Downloaded++
+						logEvent("download.completed", map[string]any{
+							"url":  post.CanonicalUrl,
+							"path": path,
+						})
 						updateManifest(post, path, time.Now())
+					} else {
+						summary.Failed++
+						if post.CanonicalUrl != "" {
+							recordFailedURL(post.CanonicalUrl)
+						} else {
+							recordFailedURL(result.Url)
+						}
+						logEvent("download.failed", map[string]any{
+							"url":   post.CanonicalUrl,
+							"path":  path,
+							"error": writeErr.Error(),
+						})
+						if failFastMode {
+							abort("Stopping due to --fail-fast")
+						}
 					}
 
 					// Add to archive if enabled and post was successfully written
@@ -225,9 +413,10 @@ var (
 					}
 				}
 				if verbose {
-					fmt.Println("Downloaded", downloadedPostsCount, "posts, out of", len(urls))
+					fmt.Println("Downloaded", summary.Downloaded, "posts, out of", len(urls))
 					fmt.Println("Done in ", time.Since(startTime))
 				}
+				finalize()
 			}
 
 			// Generate archive page if enabled
@@ -249,7 +438,14 @@ var (
 				}
 
 				if archiveErr != nil {
-					log.Printf("Error generating archive page: %v\n", archiveErr)
+					if logFormat == logFormatJSON {
+						logEvent("archive.generate_failed", map[string]any{
+							"format": format,
+							"error":  archiveErr.Error(),
+						})
+					} else {
+						log.Printf("Error generating archive page: %v\n", archiveErr)
+					}
 				} else if verbose {
 					fmt.Printf("Archive page generated: %s/index.%s\n", outputFolder, format)
 				}
@@ -271,7 +467,47 @@ func init() {
 	downloadCmd.Flags().StringVar(&fileExtensions, "file-extensions", "", "Comma-separated list of file extensions to download (e.g., 'pdf,docx,txt'). If empty, downloads all file types")
 	downloadCmd.Flags().StringVar(&filesDir, "files-dir", "files", "Directory name for downloaded file attachments")
 	downloadCmd.Flags().BoolVar(&createArchive, "create-archive", false, "Create an archive index page linking all downloaded posts")
+	downloadCmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop the download on the first error")
+	downloadCmd.Flags().BoolVar(&continueOnErr, "continue-on-error", false, "Continue downloading after errors (default)")
+	downloadCmd.MarkFlagsMutuallyExclusive("fail-fast", "continue-on-error")
 	downloadCmd.MarkFlagRequired("url")
+}
+
+type downloadSummary struct {
+	Downloaded int
+	Skipped    int
+	Failed     int
+	Mode       string
+}
+
+func logSummary(summary downloadSummary) {
+	if logFormat == logFormatJSON {
+		logEvent("download.summary", map[string]any{
+			"mode":       summary.Mode,
+			"downloaded": summary.Downloaded,
+			"skipped":    summary.Skipped,
+			"failed":     summary.Failed,
+		})
+		return
+	}
+	fmt.Printf("Summary: downloaded=%d skipped=%d failed=%d\n", summary.Downloaded, summary.Skipped, summary.Failed)
+}
+
+func writeFailedURLs(outputFolder string, urls []string) (string, error) {
+	if len(urls) == 0 {
+		return "", nil
+	}
+	if err := os.MkdirAll(outputFolder, 0755); err != nil {
+		return "", err
+	}
+
+	path := filepath.Join(outputFolder, failedURLsFile)
+	content := strings.Join(urls, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return path, err
+	}
+
+	return path, nil
 }
 
 func convertDateTime(datetime string) string {

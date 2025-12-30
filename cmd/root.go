@@ -45,6 +45,7 @@ var (
 	verbose        bool
 	ratePerSecond  int
 	maxWorkers     int
+	logFormat      string
 	beforeDate     string
 	afterDate      string
 	idCookieName   cookieName
@@ -75,6 +76,10 @@ var (
 			}
 			if maxWorkers <= 0 {
 				log.Fatal("max-workers must be greater than 0")
+			}
+			logFormat = normalizeLogFormat(logFormat)
+			if logFormat != logFormatText && logFormat != logFormatJSON {
+				log.Fatal("log-format must be either \"text\" or \"json\"")
 			}
 
 			if idCookieVal != "" && idCookieName != "" {
@@ -121,6 +126,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&afterDate, "after", "", "Download posts published after this date (format: YYYY-MM-DD)")
 	rootCmd.PersistentFlags().IntVar(&maxWorkers, "max-workers", lib.DefaultMaxWorkers, "Maximum parallel workers for downloading posts (rate limiting still applies)")
 	rootCmd.PersistentFlags().IntVar(&maxWorkers, "concurrency", lib.DefaultMaxWorkers, "Alias for --max-workers")
+	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", logFormatText, "Log format (text or json)")
 	rootCmd.MarkFlagsRequiredTogether("cookie_name", "cookie_val")
 
 	rootCmd.AddCommand(downloadCmd)

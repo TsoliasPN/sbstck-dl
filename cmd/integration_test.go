@@ -198,6 +198,7 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("after"))
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("max-workers"))
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("concurrency"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("log-format"))
 	})
 
 	t.Run("download command flags", func(t *testing.T) {
@@ -216,6 +217,8 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.Flags().Lookup("file-extensions"))
 		assert.NotNil(t, cmd.Flags().Lookup("files-dir"))
 		assert.NotNil(t, cmd.Flags().Lookup("create-archive"))
+		assert.NotNil(t, cmd.Flags().Lookup("fail-fast"))
+		assert.NotNil(t, cmd.Flags().Lookup("continue-on-error"))
 
 		// Test create-archive flag specifically
 		createArchiveFlag := cmd.Flags().Lookup("create-archive")

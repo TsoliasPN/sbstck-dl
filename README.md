@@ -465,7 +465,9 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 
 ## TODO
 
-### Roadmap
+All roadmap items are complete.
+
+## Completed
 
 #### P0 — Incremental reruns & correctness
 - [x] (P0) Add a download manifest (canonical URL -> local path, timestamps, hashes) for reliable incremental sync

@@ -375,6 +375,7 @@ Global Flags:
 ### Serving the UI
 
 The UI server binds to `127.0.0.1` only. Use `--open` to auto-open your browser, or copy the printed URL.
+The UI assets are embedded in the binary, so the serve command works without external files.
 It includes a step-by-step wizard with Basic and Advanced presets that map directly to CLI flags, plus inline tips and recommended defaults.
 Inputs are validated for URL, proxy, and date formats with actionable error messages.
 Use the Test connection step to fetch `sitemap.xml` and verify a private post URL with your cookie.
@@ -477,7 +478,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Add profile management: save/load run presets and export/import a config file from the UI
 - [x] (P2) Improve secret handling in UI: don’t persist cookies by default; optional secure storage (OS keychain/credential manager)
 - [x] (P2) Add `--open` to auto-open the browser when starting the UI, and print the URL for manual open
-- [ ] (P2) Bundle UI assets into the binary (Go `embed`) so the UI ships as a single executable
+- [x] (P2) Bundle UI assets into the binary (Go `embed`) so the UI ships as a single executable
 - [x] (P2) Expose a small local API (`/api/...`) for list/download/status, with basic hardening (CSRF token, no remote bind)
 - [x] (P2) Refactor core download logic into a reusable “runner” API so both CLI and UI share the same codepath
 - [x] (P2) Add API-level tests (`httptest`) for the UI backend and keep `go test ./...` green

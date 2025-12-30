@@ -22,6 +22,9 @@ func TestServeUIRoot(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "Substack Downloader Wizard") {
 		t.Fatalf("expected UI content in response")
 	}
+	if !strings.Contains(rec.Body.String(), "Recommended defaults") {
+		t.Fatalf("expected recommended defaults hint in response")
+	}
 }
 
 func TestServeUIRootNotFound(t *testing.T) {

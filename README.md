@@ -283,8 +283,44 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 
 ## TODO
 
+### Roadmap
+
+#### P0 — Incremental reruns & correctness
+- [ ] (P0) Add a download manifest (canonical URL -> local path, timestamps, hashes) for reliable incremental sync
+- [ ] (P0) Optimize reruns: reliably skip already-downloaded posts and only fetch new ones (beyond slug matching)
+- [ ] (P0) Fix `--before/--after` date filtering to compare parsed dates (not string comparison)
+
+#### P1 — Performance & robustness
+- [ ] (P1) Speed up incremental reruns: avoid per-URL `Glob` scanning; pre-index existing downloads once
+- [ ] (P1) Add `--concurrency/--max-workers` to control parallelism (and document how it interacts with `--rate`)
+- [ ] (P1) Add structured logs and a summary report (downloaded/skipped/failed)
+- [ ] (P1) Write a "failed URLs" file for retrying later
+- [ ] (P1) Add `--fail-fast` / `--continue-on-error` behavior switches
+
+#### P1 — Incremental controls & updates
+- [ ] (P1) Add `--force` / `--skip-existing` switches (redownload/overwrite vs incremental)
+- [ ] (P1) Detect updated posts (e.g. compare sitemap `lastmod` or content hash) and optionally refresh local copies
+- [ ] (P1) Improve resume behavior across format/layout changes (based on manifest, not only slug matching)
+
+#### P1 — Private newsletters (auth + safety)
+- [ ] (P1) Support reading cookie value from an env var (avoid shell history)
+- [ ] (P1) Support reading cookie value from a file (e.g. `--cookie-val-file`)
+- [ ] (P1) Support importing cookies from a Netscape cookie jar (optional)
+
+#### P2 — Output & archive UX
+- [ ] (P2) Add `--layout` for output structure (e.g. `flat` (current), `year/month`, `year/slug`)
+- [ ] (P2) Optionally write per-post metadata sidecar (e.g. `post.json`) or Markdown front matter
+- [ ] (P2) Add an `archive` command to regenerate `index.{format}` from existing downloads (no re-download)
+- [ ] (P2) Add optional filtering/sorting options for the archive page (e.g. by date range, newest/oldest)
+
+#### P2 — Config, CLI & docs
+- [ ] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
+- [ ] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
+- [ ] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)
+- [ ] (P2) Add `list --json` output; optionally add a metadata mode that also fetches title/date (rate-limited)
+
+### Completed
 - [x] Improve retry logic
-- [ ] Implement loading from config file
 - [x] Add support for downloading images
 - [x] Add support for downloading file attachments
 - [x] Add archive index page functionality

@@ -28,6 +28,7 @@ type ManifestEntry struct {
 	DownloadedAt string `json:"downloaded_at"`
 	ContentHash  string `json:"content_hash"`
 	Format       string `json:"format"`
+	LastModified string `json:"last_modified,omitempty"`
 }
 
 func NewManifest() *Manifest {
@@ -59,7 +60,7 @@ func LoadManifest(path string) (*Manifest, error) {
 	return &manifest, nil
 }
 
-func (m *Manifest) UpdateEntry(canonicalURL, filePath, outputDir, format string, downloadedAt time.Time) error {
+func (m *Manifest) UpdateEntry(canonicalURL, filePath, outputDir, format string, downloadedAt time.Time, lastModified string) error {
 	if canonicalURL == "" {
 		return fmt.Errorf("canonical URL is required")
 	}
@@ -78,12 +79,19 @@ func (m *Manifest) UpdateEntry(canonicalURL, filePath, outputDir, format string,
 		return err
 	}
 
+	if lastModified == "" {
+		if existing, ok := m.Entries[canonicalURL]; ok {
+			lastModified = existing.LastModified
+		}
+	}
+
 	m.Entries[canonicalURL] = ManifestEntry{
 		CanonicalURL: canonicalURL,
 		FilePath:     relPath,
 		DownloadedAt: downloadedAt.UTC().Format(time.RFC3339),
 		ContentHash:  contentHash,
 		Format:       format,
+		LastModified: lastModified,
 	}
 
 	return nil

@@ -217,6 +217,9 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.Flags().Lookup("file-extensions"))
 		assert.NotNil(t, cmd.Flags().Lookup("files-dir"))
 		assert.NotNil(t, cmd.Flags().Lookup("create-archive"))
+		assert.NotNil(t, cmd.Flags().Lookup("force"))
+		assert.NotNil(t, cmd.Flags().Lookup("skip-existing"))
+		assert.NotNil(t, cmd.Flags().Lookup("refresh-updated"))
 		assert.NotNil(t, cmd.Flags().Lookup("fail-fast"))
 		assert.NotNil(t, cmd.Flags().Lookup("continue-on-error"))
 

@@ -18,7 +18,7 @@ func TestFilterExistingPostsManifestSkips(t *testing.T) {
 	require.NoError(t, os.WriteFile(filePath, []byte("content"), 0644))
 
 	manifest := lib.NewManifest()
-	require.NoError(t, manifest.UpdateEntry(url, filePath, outputDir, "html", time.Now()))
+	require.NoError(t, manifest.UpdateEntry(url, filePath, outputDir, "html", time.Now(), ""))
 	require.NoError(t, manifest.Save(filepath.Join(outputDir, lib.ManifestFilename)))
 
 	filtered, err := filterExistingPosts([]string{url}, outputDir, "html")
@@ -34,7 +34,7 @@ func TestFilterExistingPostsManifestFormatMismatch(t *testing.T) {
 	require.NoError(t, os.WriteFile(filePath, []byte("content"), 0644))
 
 	manifest := lib.NewManifest()
-	require.NoError(t, manifest.UpdateEntry(url, filePath, outputDir, "md", time.Now()))
+	require.NoError(t, manifest.UpdateEntry(url, filePath, outputDir, "md", time.Now(), ""))
 	require.NoError(t, manifest.Save(filepath.Join(outputDir, lib.ManifestFilename)))
 
 	filtered, err := filterExistingPosts([]string{url}, outputDir, "html")
@@ -51,7 +51,7 @@ func TestFilterExistingPostsManifestMissingFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filePath, []byte("content"), 0644))
 
 	manifest := lib.NewManifest()
-	require.NoError(t, manifest.UpdateEntry(url, filePath, outputDir, "html", time.Now()))
+	require.NoError(t, manifest.UpdateEntry(url, filePath, outputDir, "html", time.Now(), ""))
 	require.NoError(t, manifest.Save(filepath.Join(outputDir, lib.ManifestFilename)))
 
 	require.NoError(t, os.Remove(filePath))

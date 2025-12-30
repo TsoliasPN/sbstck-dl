@@ -154,7 +154,7 @@ func TestPostFormatConversions(t *testing.T) {
 		// Note: html-to-markdown library is quite robust, so we test with extremely malformed HTML
 		problemPost := createSamplePost()
 		problemPost.BodyHTML = "<div><p>Nested without closing</div>"
-		
+
 		// This should still work as the library handles most malformed HTML
 		_, err := problemPost.ToMD(true)
 		assert.NoError(t, err) // The library is quite tolerant
@@ -164,12 +164,12 @@ func TestPostFormatConversions(t *testing.T) {
 		// Create a post that would have issues during JSON marshaling
 		// This is hard to trigger with normal Post struct, but we can test the error path
 		problemPost := createSamplePost()
-		
+
 		// Test with valid data (JSON marshaling rarely fails with valid structs)
 		jsonStr, err := problemPost.ToJSON()
 		assert.NoError(t, err)
 		assert.NotEmpty(t, jsonStr)
-		
+
 		// Verify the JSON is valid
 		var parsedPost Post
 		err = json.Unmarshal([]byte(jsonStr), &parsedPost)
@@ -241,7 +241,7 @@ func TestPostWriteToFile(t *testing.T) {
 	// Test with addSourceURL enabled
 	t.Run("with source URL", func(t *testing.T) {
 		formats := []string{"html", "md", "txt"}
-		
+
 		for _, format := range formats {
 			t.Run(format, func(t *testing.T) {
 				filePath := filepath.Join(tempDir, fmt.Sprintf("test-with-source.%s", format))
@@ -272,7 +272,7 @@ func TestPostWriteToFile(t *testing.T) {
 	t.Run("with source URL but no canonical URL", func(t *testing.T) {
 		postWithoutURL := createSamplePost()
 		postWithoutURL.CanonicalUrl = ""
-		
+
 		filePath := filepath.Join(tempDir, "test-no-url.html")
 		err := postWithoutURL.WriteToFile(filePath, "html", true)
 		require.NoError(t, err)
@@ -485,12 +485,12 @@ func TestExtractorGetAllPostsURLs(t *testing.T) {
 
 		// Should get 3 posts (dates 2023-01-03, 2023-01-04, 2023-01-05)
 		assert.Len(t, urls, 3)
-		
+
 		// Verify the filtered URLs are correct
 		for _, url := range urls {
 			// Should contain test-post-3, test-post-4, or test-post-5
-			assert.True(t, strings.Contains(url, "test-post-3") || 
-				strings.Contains(url, "test-post-4") || 
+			assert.True(t, strings.Contains(url, "test-post-3") ||
+				strings.Contains(url, "test-post-4") ||
 				strings.Contains(url, "test-post-5"))
 		}
 	})
@@ -509,6 +509,31 @@ func TestExtractorGetAllPostsURLs(t *testing.T) {
 		_, err := extractor.GetAllPostsURLs(ctx, "invalid-url", nil)
 		assert.Error(t, err)
 	})
+}
+
+func TestExtractorGetAllPostsEntries(t *testing.T) {
+	server, posts := createSubstackTestServer()
+	defer server.Close()
+
+	extractor := NewExtractor(nil)
+	ctx := context.Background()
+
+	entries, err := extractor.GetAllPostsEntries(ctx, server.URL, nil)
+	require.NoError(t, err)
+	assert.Equal(t, len(posts), len(entries))
+
+	entryMap := make(map[string]string)
+	for _, entry := range entries {
+		entryMap[entry.URL] = entry.LastMod
+	}
+
+	expectedURL := "https://example.substack.com/p/test-post-1"
+	expectedLastmod := "2023-01-01"
+	if got, ok := entryMap[expectedURL]; ok {
+		assert.Equal(t, expectedLastmod, got)
+	} else {
+		t.Fatalf("missing entry for %s", expectedURL)
+	}
 }
 
 // Test Extractor.ExtractAllPosts
@@ -865,7 +890,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 	t.Run("SubtitleExtraction", func(t *testing.T) {
 		post := createSamplePost()
 		post.Subtitle = "" // Clear subtitle from JSON to test HTML extraction
-		
+
 		// Create mock HTML with subtitle element
 		html := fmt.Sprintf(`
 <!DOCTYPE html>
@@ -896,7 +921,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 
 		extractedPost, err := extractor.ExtractPost(ctx, server.URL)
 		require.NoError(t, err)
-		
+
 		// Verify subtitle was extracted and trimmed
 		assert.Equal(t, "This is the subtitle from HTML", extractedPost.Subtitle)
 	})
@@ -904,7 +929,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 	t.Run("CoverImageFromOGTag", func(t *testing.T) {
 		post := createSamplePost()
 		post.CoverImage = "" // Clear cover image from JSON to test og:image extraction
-		
+
 		// Create mock HTML with og:image meta tag
 		html := fmt.Sprintf(`
 <!DOCTYPE html>
@@ -934,7 +959,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 
 		extractedPost, err := extractor.ExtractPost(ctx, server.URL)
 		require.NoError(t, err)
-		
+
 		// Verify cover image was extracted from og:image
 		assert.Equal(t, "https://example.com/og-cover.jpg", extractedPost.CoverImage)
 	})
@@ -942,7 +967,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 	t.Run("ExistingCoverImagePreserved", func(t *testing.T) {
 		post := createSamplePost()
 		post.CoverImage = "https://existing.com/image.jpg"
-		
+
 		// Create mock HTML with og:image meta tag (should be ignored)
 		html := fmt.Sprintf(`
 <!DOCTYPE html>
@@ -972,7 +997,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 
 		extractedPost, err := extractor.ExtractPost(ctx, server.URL)
 		require.NoError(t, err)
-		
+
 		// Verify existing cover image was preserved (not overwritten by og:image)
 		assert.Equal(t, "https://existing.com/image.jpg", extractedPost.CoverImage)
 	})
@@ -981,7 +1006,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 		post := createSamplePost()
 		post.Subtitle = ""
 		post.CoverImage = ""
-		
+
 		// Create mock HTML without subtitle or og:image
 		html := fmt.Sprintf(`
 <!DOCTYPE html>
@@ -1010,7 +1035,7 @@ func TestEnhancedPostExtraction(t *testing.T) {
 
 		extractedPost, err := extractor.ExtractPost(ctx, server.URL)
 		require.NoError(t, err)
-		
+
 		// Verify empty subtitle and cover image remain empty
 		assert.Empty(t, extractedPost.Subtitle)
 		assert.Empty(t, extractedPost.CoverImage)
@@ -1038,17 +1063,17 @@ func TestArchive(t *testing.T) {
 		post1 := createSamplePost()
 		post1.PostDate = "2023-01-01T00:00:00Z"
 		post1.Title = "First Post"
-		
+
 		post2 := createSamplePost()
 		post2.PostDate = "2023-01-02T00:00:00Z"
 		post2.Title = "Second Post"
-		
+
 		post3 := createSamplePost()
 		post3.PostDate = "2023-01-03T00:00:00Z"
 		post3.Title = "Third Post"
 
 		downloadTime := time.Now()
-		
+
 		// Add entries in random order
 		archive.AddEntry(post2, "post2.html", downloadTime)
 		archive.AddEntry(post1, "post1.html", downloadTime)
@@ -1056,24 +1081,24 @@ func TestArchive(t *testing.T) {
 
 		// Verify entries were added and sorted by date (newest first)
 		assert.Len(t, archive.Entries, 3)
-		assert.Equal(t, "Third Post", archive.Entries[0].Post.Title) // 2023-01-03 (newest)
+		assert.Equal(t, "Third Post", archive.Entries[0].Post.Title)  // 2023-01-03 (newest)
 		assert.Equal(t, "Second Post", archive.Entries[1].Post.Title) // 2023-01-02
-		assert.Equal(t, "First Post", archive.Entries[2].Post.Title) // 2023-01-01 (oldest)
+		assert.Equal(t, "First Post", archive.Entries[2].Post.Title)  // 2023-01-01 (oldest)
 	})
 
 	t.Run("SortingWithInvalidDates", func(t *testing.T) {
 		archive := NewArchive()
-		
+
 		post1 := createSamplePost()
 		post1.PostDate = "invalid-date"
 		post1.Title = "A Post"
-		
+
 		post2 := createSamplePost()
 		post2.PostDate = "also-invalid"
 		post2.Title = "B Post"
-		
+
 		downloadTime := time.Now()
-		
+
 		archive.AddEntry(post2, "post2.html", downloadTime)
 		archive.AddEntry(post1, "post1.html", downloadTime)
 
@@ -1088,9 +1113,9 @@ func TestArchive(t *testing.T) {
 		post := createSamplePost()
 		filePath := "/path/to/post.html"
 		downloadTime := time.Now()
-		
+
 		archive.AddEntry(post, filePath, downloadTime)
-		
+
 		entry := archive.Entries[0]
 		assert.Equal(t, post, entry.Post)
 		assert.Equal(t, filePath, entry.FilePath)
@@ -1104,115 +1129,115 @@ func TestArchivePageGeneration(t *testing.T) {
 	setupTestArchive := func() (*Archive, string) {
 		tempDir, err := os.MkdirTemp("", "archive_test")
 		require.NoError(t, err)
-		
+
 		archive := NewArchive()
-		
+
 		// Create sample posts with different dates and metadata
 		post1 := createSamplePost()
 		post1.PostDate = "2023-01-01T10:30:00Z"
 		post1.Title = "First Post"
 		post1.Subtitle = "A great first post"
 		post1.CoverImage = "https://example.com/cover1.jpg"
-		
+
 		post2 := createSamplePost()
-		post2.PostDate = "2023-01-02T15:45:00Z" 
+		post2.PostDate = "2023-01-02T15:45:00Z"
 		post2.Title = "Second Post"
 		post2.Subtitle = "" // Empty subtitle, should fall back to description
 		post2.Description = "This is the description"
 		post2.CoverImage = ""
-		
+
 		post3 := createSamplePost()
 		post3.PostDate = "2023-01-03T08:15:00Z"
 		post3.Title = "Third Post"
 		post3.Subtitle = ""
 		post3.Description = ""
 		post3.CoverImage = "https://example.com/cover3.jpg"
-		
+
 		downloadTime, _ := time.Parse(time.RFC3339, "2023-01-10T12:00:00Z")
-		
+
 		archive.AddEntry(post1, filepath.Join(tempDir, "post1.html"), downloadTime)
 		archive.AddEntry(post2, filepath.Join(tempDir, "post2.html"), downloadTime.Add(time.Hour))
 		archive.AddEntry(post3, filepath.Join(tempDir, "post3.html"), downloadTime.Add(2*time.Hour))
-		
+
 		return archive, tempDir
 	}
 
 	t.Run("GenerateHTML", func(t *testing.T) {
 		archive, tempDir := setupTestArchive()
 		defer os.RemoveAll(tempDir)
-		
+
 		err := archive.GenerateHTML(tempDir)
 		require.NoError(t, err)
-		
+
 		// Check file was created
 		indexPath := filepath.Join(tempDir, "index.html")
 		assert.FileExists(t, indexPath)
-		
+
 		// Read and verify content
 		content, err := os.ReadFile(indexPath)
 		require.NoError(t, err)
 		htmlContent := string(content)
-		
+
 		// Verify HTML structure
 		assert.Contains(t, htmlContent, "<!DOCTYPE html>")
 		assert.Contains(t, htmlContent, "<title>Substack Archive</title>")
 		assert.Contains(t, htmlContent, "<h1>Substack Archive</h1>")
-		
+
 		// Verify posts are included in correct order (newest first)
 		assert.Contains(t, htmlContent, "Third Post") // Should appear first (newest)
 		assert.Contains(t, htmlContent, "Second Post")
 		assert.Contains(t, htmlContent, "First Post")
-		
+
 		// Verify relative paths
 		assert.Contains(t, htmlContent, "post1.html")
-		assert.Contains(t, htmlContent, "post2.html") 
+		assert.Contains(t, htmlContent, "post2.html")
 		assert.Contains(t, htmlContent, "post3.html")
-		
+
 		// Verify cover images and descriptions
 		assert.Contains(t, htmlContent, "https://example.com/cover1.jpg")
 		assert.Contains(t, htmlContent, "https://example.com/cover3.jpg")
-		assert.Contains(t, htmlContent, "A great first post") // Subtitle
+		assert.Contains(t, htmlContent, "A great first post")      // Subtitle
 		assert.Contains(t, htmlContent, "This is the description") // Fallback description
-		
+
 		// Verify dates are formatted
-		assert.Contains(t, htmlContent, "January 1, 2023") // Formatted publication date
+		assert.Contains(t, htmlContent, "January 1, 2023")        // Formatted publication date
 		assert.Contains(t, htmlContent, "January 10, 2023 12:00") // Formatted download date
 	})
 
 	t.Run("GenerateMarkdown", func(t *testing.T) {
 		archive, tempDir := setupTestArchive()
 		defer os.RemoveAll(tempDir)
-		
+
 		err := archive.GenerateMarkdown(tempDir)
 		require.NoError(t, err)
-		
+
 		// Check file was created
 		indexPath := filepath.Join(tempDir, "index.md")
 		assert.FileExists(t, indexPath)
-		
+
 		// Read and verify content
 		content, err := os.ReadFile(indexPath)
 		require.NoError(t, err)
 		mdContent := string(content)
-		
+
 		// Verify markdown structure
 		assert.Contains(t, mdContent, "# Substack Archive\n\n")
 		assert.Contains(t, mdContent, "## [Third Post](post3.html)") // Newest first
 		assert.Contains(t, mdContent, "## [Second Post](post2.html)")
 		assert.Contains(t, mdContent, "## [First Post](post1.html)")
-		
+
 		// Verify metadata format
 		assert.Contains(t, mdContent, "**Published:** January 1, 2023")
 		assert.Contains(t, mdContent, "**Downloaded:** January 10, 2023 12:00")
-		
+
 		// Verify cover image markdown syntax
 		assert.Contains(t, mdContent, "![Cover Image](https://example.com/cover1.jpg)")
 		assert.Contains(t, mdContent, "![Cover Image](https://example.com/cover3.jpg)")
-		
+
 		// Verify descriptions in italic
 		assert.Contains(t, mdContent, "*A great first post*")
 		assert.Contains(t, mdContent, "*This is the description*")
-		
+
 		// Verify separators
 		assert.Contains(t, mdContent, "---")
 	})
@@ -1220,40 +1245,40 @@ func TestArchivePageGeneration(t *testing.T) {
 	t.Run("GenerateText", func(t *testing.T) {
 		archive, tempDir := setupTestArchive()
 		defer os.RemoveAll(tempDir)
-		
+
 		err := archive.GenerateText(tempDir)
 		require.NoError(t, err)
-		
+
 		// Check file was created
 		indexPath := filepath.Join(tempDir, "index.txt")
 		assert.FileExists(t, indexPath)
-		
+
 		// Read and verify content
 		content, err := os.ReadFile(indexPath)
 		require.NoError(t, err)
 		txtContent := string(content)
-		
+
 		// Verify text structure
 		assert.Contains(t, txtContent, "SUBSTACK ARCHIVE\n================")
-		
+
 		// Verify post entries (newest first)
 		assert.Contains(t, txtContent, "Title: Third Post")
-		assert.Contains(t, txtContent, "Title: Second Post") 
+		assert.Contains(t, txtContent, "Title: Second Post")
 		assert.Contains(t, txtContent, "Title: First Post")
-		
+
 		// Verify file paths
 		assert.Contains(t, txtContent, "File: post1.html")
 		assert.Contains(t, txtContent, "File: post2.html")
 		assert.Contains(t, txtContent, "File: post3.html")
-		
+
 		// Verify formatted dates
 		assert.Contains(t, txtContent, "Published: January 1, 2023")
 		assert.Contains(t, txtContent, "Downloaded: January 10, 2023 12:00")
-		
+
 		// Verify descriptions
 		assert.Contains(t, txtContent, "Description: A great first post")
 		assert.Contains(t, txtContent, "Description: This is the description")
-		
+
 		// Verify separators
 		assert.Contains(t, txtContent, strings.Repeat("-", 50))
 	})
@@ -1262,26 +1287,26 @@ func TestArchivePageGeneration(t *testing.T) {
 		tempDir, err := os.MkdirTemp("", "empty_archive_test")
 		require.NoError(t, err)
 		defer os.RemoveAll(tempDir)
-		
+
 		archive := NewArchive()
-		
+
 		// Test each format with empty archive
 		err = archive.GenerateHTML(tempDir)
 		require.NoError(t, err)
-		
+
 		err = archive.GenerateMarkdown(tempDir)
 		require.NoError(t, err)
-		
+
 		err = archive.GenerateText(tempDir)
 		require.NoError(t, err)
-		
+
 		// Verify files exist and contain basic headers
 		htmlContent, _ := os.ReadFile(filepath.Join(tempDir, "index.html"))
 		assert.Contains(t, string(htmlContent), "Substack Archive")
-		
+
 		mdContent, _ := os.ReadFile(filepath.Join(tempDir, "index.md"))
 		assert.Contains(t, string(mdContent), "# Substack Archive")
-		
+
 		txtContent, _ := os.ReadFile(filepath.Join(tempDir, "index.txt"))
 		assert.Contains(t, string(txtContent), "SUBSTACK ARCHIVE")
 	})
@@ -1290,16 +1315,16 @@ func TestArchivePageGeneration(t *testing.T) {
 		archive := NewArchive()
 		post := createSamplePost()
 		archive.AddEntry(post, "test.html", time.Now())
-		
+
 		// Try to write to non-existent directory with restricted permissions
 		invalidDir := "/non/existent/directory"
-		
+
 		err := archive.GenerateHTML(invalidDir)
 		assert.Error(t, err)
-		
+
 		err = archive.GenerateMarkdown(invalidDir)
 		assert.Error(t, err)
-		
+
 		err = archive.GenerateText(invalidDir)
 		assert.Error(t, err)
 	})

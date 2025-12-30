@@ -46,7 +46,7 @@ func TestManifestUpdateSaveAndReload(t *testing.T) {
 
 	downloadedAt := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
 	canonical := "https://example.com/p/test"
-	if err := manifest.UpdateEntry(canonical, filePath, dir, "html", downloadedAt); err != nil {
+	if err := manifest.UpdateEntry(canonical, filePath, dir, "html", downloadedAt, "2024-01-03"); err != nil {
 		t.Fatalf("UpdateEntry returned error: %v", err)
 	}
 	if err := manifest.Save(manifestPath); err != nil {
@@ -76,6 +76,9 @@ func TestManifestUpdateSaveAndReload(t *testing.T) {
 	}
 	if entry.Format != "html" {
 		t.Fatalf("expected format %q, got %q", "html", entry.Format)
+	}
+	if entry.LastModified != "2024-01-03" {
+		t.Fatalf("expected last_modified %q, got %q", "2024-01-03", entry.LastModified)
 	}
 	if reloaded.Version != ManifestVersion {
 		t.Fatalf("expected version %d, got %d", ManifestVersion, reloaded.Version)

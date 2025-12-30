@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -39,6 +43,7 @@ func init() {
 func serveUIHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", serveUIRoot)
+	mux.HandleFunc("/api/test-connection", serveTestConnection)
 	return mux
 }
 
@@ -49,6 +54,198 @@ func serveUIRoot(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, serveHTML)
+}
+
+type testConnectionRequest struct {
+	PublicationURL string `json:"publication_url"`
+	PrivateURL     string `json:"private_url"`
+	CookieName     string `json:"cookie_name"`
+	CookieVal      string `json:"cookie_val"`
+	CookieValFile  string `json:"cookie_val_file"`
+	CookieJar      string `json:"cookie_jar"`
+	Proxy          string `json:"proxy"`
+}
+
+type testConnectionResponse struct {
+	OK            bool     `json:"ok"`
+	SitemapURL    string   `json:"sitemap_url"`
+	SitemapStatus int      `json:"sitemap_status,omitempty"`
+	SitemapOK     bool     `json:"sitemap_ok"`
+	PrivateURL    string   `json:"private_url,omitempty"`
+	PrivateStatus int      `json:"private_status,omitempty"`
+	PrivateOK     bool     `json:"private_ok"`
+	Errors        []string `json:"errors,omitempty"`
+}
+
+func serveTestConnection(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req testConnectionRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeTestResponse(w, testConnectionResponse{
+			OK:     false,
+			Errors: []string{fmt.Sprintf("Invalid request payload: %v", err)},
+		})
+		return
+	}
+
+	errorsList := make([]string, 0)
+	pubURL, err := parseURL(strings.TrimSpace(req.PublicationURL))
+	if err != nil || pubURL == nil {
+		errorsList = append(errorsList, "Substack URL must be a valid http(s) URL.")
+	}
+
+	var proxyURL *url.URL
+	if strings.TrimSpace(req.Proxy) != "" {
+		parsedProxy, err := parseURL(strings.TrimSpace(req.Proxy))
+		if err != nil {
+			errorsList = append(errorsList, "Proxy URL must be a valid http(s) URL.")
+		} else {
+			proxyURL = parsedProxy
+		}
+	}
+
+	domainHint := ""
+	if pubURL != nil {
+		domainHint = pubURL.Hostname()
+	}
+
+	cookie, cookieErrors := resolveTestCookie(req, domainHint)
+	errorsList = append(errorsList, cookieErrors...)
+
+	response := testConnectionResponse{
+		SitemapURL: strings.TrimSpace(req.PublicationURL),
+		PrivateURL: strings.TrimSpace(req.PrivateURL),
+	}
+
+	if pubURL != nil {
+		response.SitemapURL = buildSitemapURL(pubURL)
+	}
+
+	client := newTestClient(proxyURL)
+
+	if pubURL != nil {
+		status, err := fetchStatus(client, response.SitemapURL, nil)
+		if err != nil {
+			errorsList = append(errorsList, fmt.Sprintf("Failed to fetch sitemap: %v", err))
+		} else {
+			response.SitemapStatus = status
+			response.SitemapOK = status >= 200 && status < 300
+			if !response.SitemapOK {
+				errorsList = append(errorsList, fmt.Sprintf("Sitemap returned status %d.", status))
+			}
+		}
+	}
+
+	privateURL := strings.TrimSpace(req.PrivateURL)
+	if privateURL != "" {
+		if _, err := parseURL(privateURL); err != nil {
+			errorsList = append(errorsList, "Private post URL must be a valid http(s) URL.")
+		} else if cookie == nil {
+			errorsList = append(errorsList, "Cookie name/value required to test a private post URL.")
+		} else {
+			status, err := fetchStatus(client, privateURL, cookie)
+			if err != nil {
+				errorsList = append(errorsList, fmt.Sprintf("Failed to fetch private post: %v", err))
+			} else {
+				response.PrivateStatus = status
+				response.PrivateOK = status >= 200 && status < 300
+				if !response.PrivateOK {
+					errorsList = append(errorsList, fmt.Sprintf("Private post returned status %d.", status))
+				}
+			}
+		}
+	}
+
+	response.Errors = errorsList
+	response.OK = len(errorsList) == 0 && response.SitemapOK && (privateURL == "" || response.PrivateOK)
+	writeTestResponse(w, response)
+}
+
+func writeTestResponse(w http.ResponseWriter, response testConnectionResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+func resolveTestCookie(req testConnectionRequest, domainHint string) (*http.Cookie, []string) {
+	errorsList := make([]string, 0)
+	var cn cookieName
+	if strings.TrimSpace(req.CookieName) != "" {
+		if err := cn.Set(strings.TrimSpace(req.CookieName)); err != nil {
+			errorsList = append(errorsList, err.Error())
+		}
+	}
+
+	cookieVal, err := resolveCookieValue(strings.TrimSpace(req.CookieVal), strings.TrimSpace(req.CookieValFile))
+	if err != nil {
+		errorsList = append(errorsList, fmt.Sprintf("Failed to read cookie value: %v", err))
+	}
+
+	if cookieVal == "" && strings.TrimSpace(req.CookieJar) != "" {
+		jarName, jarValue, err := readCookieFromJar(strings.TrimSpace(req.CookieJar), cn, domainHint)
+		if err != nil {
+			errorsList = append(errorsList, fmt.Sprintf("Failed to read cookie jar: %v", err))
+		} else {
+			if cn == "" {
+				cn = jarName
+			}
+			cookieVal = jarValue
+		}
+	}
+
+	if cn != "" && cookieVal == "" {
+		errorsList = append(errorsList, "Cookie value is required when cookie name is set.")
+	}
+	if cn == "" && cookieVal != "" {
+		errorsList = append(errorsList, "Cookie name is required when cookie value is set.")
+	}
+
+	if cn == "" || cookieVal == "" {
+		return nil, errorsList
+	}
+
+	return &http.Cookie{
+		Name:  cn.String(),
+		Value: cookieVal,
+	}, errorsList
+}
+
+func buildSitemapURL(pubURL *url.URL) string {
+	normalized := *pubURL
+	normalized.Path = ""
+	normalized.RawQuery = ""
+	normalized.Fragment = ""
+	return normalized.ResolveReference(&url.URL{Path: "/sitemap.xml"}).String()
+}
+
+func newTestClient(proxyURL *url.URL) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if proxyURL != nil {
+		transport.Proxy = http.ProxyURL(proxyURL)
+	}
+	return &http.Client{
+		Transport: transport,
+		Timeout:   15 * time.Second,
+	}
+}
+
+func fetchStatus(client *http.Client, targetURL string, cookie *http.Cookie) (int, error) {
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		return 0, err
+	}
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode, nil
 }
 
 const serveHTML = `<!DOCTYPE html>
@@ -191,6 +388,13 @@ const serveHTML = `<!DOCTYPE html>
       color: #b91c1c;
       font-size: 13px;
     }
+    .test-status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .test-status.ok { color: #166534; }
+    .test-status.bad { color: #b91c1c; }
     .field.invalid input,
     .field.invalid select,
     .field.invalid textarea {
@@ -283,6 +487,12 @@ const serveHTML = `<!DOCTYPE html>
       transition: 0.2s ease;
     }
     .nav button.primary {
+      border-color: #fdba74;
+      background: #fff7ed;
+      color: var(--ink);
+      font-weight: 600;
+    }
+    button.primary {
       border-color: #fdba74;
       background: #fff7ed;
       color: var(--ink);
@@ -567,6 +777,23 @@ const serveHTML = `<!DOCTYPE html>
               </label>
             </div>
           </div>
+
+          <div class="group">
+            <h3>Test connection</h3>
+            <p class="small">Fetches sitemap.xml and optionally tests a private post URL using your cookie.</p>
+            <div class="grid">
+              <label class="field">
+                Private post URL
+                <input id="privateUrl" type="text" placeholder="https://example.substack.com/p/private-post" />
+                <span class="help">Optional. Requires cookie fields above.</span>
+                <span class="error" data-error-for="privateUrl"></span>
+              </label>
+              <div>
+                <button type="button" id="testBtn" class="primary">Test connection</button>
+                <div id="testStatus" class="test-status">Run a test to verify access.</div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="step-panel" data-step="3">
@@ -614,9 +841,16 @@ const serveHTML = `<!DOCTYPE html>
         errorTargets[el.dataset.errorFor] = el;
       });
       const urlInput = document.getElementById('url');
+      const privateUrlInput = document.getElementById('privateUrl');
       const proxyInput = document.getElementById('proxy');
       const afterDateInput = document.getElementById('afterDate');
       const beforeDateInput = document.getElementById('beforeDate');
+      const testBtn = document.getElementById('testBtn');
+      const testStatus = document.getElementById('testStatus');
+      const cookieNameInput = document.getElementById('cookieName');
+      const cookieValInput = document.getElementById('cookieVal');
+      const cookieValFileInput = document.getElementById('cookieValFile');
+      const cookieJarInput = document.getElementById('cookieJar');
       let currentStep = 1;
       let activePreset = 'basic';
 
@@ -700,6 +934,11 @@ const serveHTML = `<!DOCTYPE html>
         const proxyError = validateURLField(proxyValue, 'Proxy URL');
         setError('proxy', proxyError);
         if (proxyError) errors.push(proxyError);
+
+        const privateValue = (privateUrlInput && !privateUrlInput.disabled) ? privateUrlInput.value.trim() : '';
+        const privateError = validateURLField(privateValue, 'Private post URL');
+        setError('privateUrl', privateError);
+        if (privateError) errors.push(privateError);
 
         const afterValue = (afterDateInput && !afterDateInput.disabled) ? afterDateInput.value.trim() : '';
         const afterError = validateDateField(afterValue, 'After date');
@@ -814,6 +1053,75 @@ const serveHTML = `<!DOCTYPE html>
           } else {
             copyStatus.textContent = 'Copy not supported.';
           }
+        });
+      }
+
+      if (testBtn) {
+        testBtn.addEventListener('click', function () {
+          const errors = validateAndRender();
+          const urlValue = (urlInput ? urlInput.value : '').trim();
+          if (errors.length) {
+            if (testStatus) {
+              testStatus.textContent = 'Fix the highlighted fields before testing.';
+              testStatus.className = 'test-status bad';
+            }
+            return;
+          }
+          if (!urlValue) {
+            if (testStatus) {
+              testStatus.textContent = 'Add a Substack URL before testing.';
+              testStatus.className = 'test-status bad';
+            }
+            return;
+          }
+
+          const payload = {
+            publication_url: urlValue,
+            private_url: privateUrlInput ? privateUrlInput.value.trim() : '',
+            cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
+            cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
+            cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
+            cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+            proxy: (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : ''
+          };
+
+          testBtn.disabled = true;
+          if (testStatus) {
+            testStatus.textContent = 'Testing...';
+            testStatus.className = 'test-status';
+          }
+
+          fetch('/api/test-connection', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }).then(res => res.json()).then(data => {
+            if (!testStatus) return;
+            const parts = [];
+            if (data.sitemap_ok) {
+              parts.push('Sitemap OK (' + data.sitemap_status + ')');
+            } else if (data.sitemap_status) {
+              parts.push('Sitemap failed (' + data.sitemap_status + ')');
+            }
+            if (data.private_url) {
+              if (data.private_ok) {
+                parts.push('Private post OK (' + data.private_status + ')');
+              } else if (data.private_status) {
+                parts.push('Private post failed (' + data.private_status + ')');
+              }
+            }
+            if (data.errors && data.errors.length) {
+              parts.push(data.errors.join(' | '));
+            }
+            testStatus.textContent = parts.join(' | ') || 'No response details.';
+            testStatus.className = 'test-status ' + (data.ok ? 'ok' : 'bad');
+          }).catch(err => {
+            if (!testStatus) return;
+            testStatus.textContent = 'Test failed: ' + err;
+            testStatus.className = 'test-status bad';
+          }).finally(() => {
+            testBtn.disabled = false;
+          });
         });
       }
 

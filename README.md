@@ -369,6 +369,7 @@ Global Flags:
 The UI server binds to `127.0.0.1` only.
 It includes a step-by-step wizard with Basic and Advanced presets that map directly to CLI flags, plus inline tips and recommended defaults.
 Inputs are validated for URL, proxy, and date formats with actionable error messages.
+Use the Test connection step to fetch `sitemap.xml` and verify a private post URL with your cookie.
 
 ```bash
 Usage:
@@ -452,7 +453,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Build a step-by-step “wizard” flow with presets (Basic vs Advanced) that maps 1:1 to CLI flags
 - [x] (P2) Add inline help/tooltips and recommended defaults (format, images/files, rate limits) for non-technical users
 - [x] (P2) Validate inputs in the UI (URL/proxy/date formats) and provide actionable error messages
-- [ ] (P2) Add a “Test connection” step (fetch `sitemap.xml`, verify cookie works for a known private post)
+- [x] (P2) Add a “Test connection” step (fetch `sitemap.xml`, verify cookie works for a known private post)
 - [ ] (P2) Add a dry-run preview screen: posts count, newest/oldest dates, and what will be downloaded/skipped
 - [ ] (P2) Run downloads as background jobs with live progress (per post), logs, retry stats, and a Cancel button
 - [ ] (P2) Add a “Rerun later”/incremental sync view (show last run, new posts since last run, run again)

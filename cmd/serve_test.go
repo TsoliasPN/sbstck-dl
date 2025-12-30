@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,5 +40,91 @@ func TestServeUIRootNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d", rec.Code)
+	}
+}
+
+type testConnectionResponsePayload struct {
+	OK            bool     `json:"ok"`
+	SitemapOK     bool     `json:"sitemap_ok"`
+	SitemapStatus int      `json:"sitemap_status"`
+	PrivateOK     bool     `json:"private_ok"`
+	PrivateStatus int      `json:"private_status"`
+	Errors        []string `json:"errors"`
+}
+
+func TestServeTestConnectionSuccess(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sitemap.xml":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("<urlset></urlset>"))
+		case "/private":
+			cookie, err := r.Cookie("substack.sid")
+			if err != nil || cookie.Value != "token" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+
+	payload := map[string]string{
+		"publication_url": upstream.URL,
+		"private_url":     upstream.URL + "/private",
+		"cookie_name":     "substack.sid",
+		"cookie_val":      "token",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test-connection", bytes.NewReader(data))
+	rec := httptest.NewRecorder()
+
+	serveUIHandler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp testConnectionResponsePayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.OK || !resp.SitemapOK || !resp.PrivateOK {
+		t.Fatalf("expected ok response, got %+v", resp)
+	}
+	if resp.SitemapStatus != http.StatusOK || resp.PrivateStatus != http.StatusOK {
+		t.Fatalf("unexpected statuses: %+v", resp)
+	}
+}
+
+func TestServeTestConnectionInvalidURL(t *testing.T) {
+	payload := map[string]string{
+		"publication_url": "",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test-connection", bytes.NewReader(data))
+	rec := httptest.NewRecorder()
+
+	serveUIHandler().ServeHTTP(rec, req)
+
+	var resp testConnectionResponsePayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.OK {
+		t.Fatalf("expected failure response")
+	}
+	if len(resp.Errors) == 0 {
+		t.Fatalf("expected error messages")
 	}
 }

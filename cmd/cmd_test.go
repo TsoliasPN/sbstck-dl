@@ -3,6 +3,7 @@ package cmd
 import (
 	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/alexferrari88/sbstck-dl/lib"
@@ -184,6 +185,7 @@ func TestMakePath(t *testing.T) {
 		post         lib.Post
 		outputFolder string
 		format       string
+		layout       string
 		expected     string
 	}{
 		{
@@ -191,34 +193,54 @@ func TestMakePath(t *testing.T) {
 			post:         post,
 			outputFolder: "/tmp/downloads",
 			format:       "html",
-			expected:     "/tmp/downloads/20230101_103000_test-post.html",
+			layout:       "flat",
+			expected:     filepath.Join("/tmp/downloads", "20230101_103000_test-post.html"),
 		},
 		{
 			name:         "markdown format",
 			post:         post,
 			outputFolder: "/tmp/downloads",
 			format:       "md",
-			expected:     "/tmp/downloads/20230101_103000_test-post.md",
+			layout:       "flat",
+			expected:     filepath.Join("/tmp/downloads", "20230101_103000_test-post.md"),
 		},
 		{
 			name:         "text format",
 			post:         post,
 			outputFolder: "/tmp/downloads",
 			format:       "txt",
-			expected:     "/tmp/downloads/20230101_103000_test-post.txt",
+			layout:       "flat",
+			expected:     filepath.Join("/tmp/downloads", "20230101_103000_test-post.txt"),
 		},
 		{
 			name:         "no output folder",
 			post:         post,
 			outputFolder: "",
 			format:       "html",
-			expected:     "/20230101_103000_test-post.html",
+			layout:       "flat",
+			expected:     filepath.Join("", "20230101_103000_test-post.html"),
+		},
+		{
+			name:         "year month layout",
+			post:         post,
+			outputFolder: "/tmp/downloads",
+			format:       "html",
+			layout:       "year/month",
+			expected:     filepath.Join("/tmp/downloads", "2023", "01", "20230101_103000_test-post.html"),
+		},
+		{
+			name:         "year slug layout",
+			post:         post,
+			outputFolder: "/tmp/downloads",
+			format:       "html",
+			layout:       "year/slug",
+			expected:     filepath.Join("/tmp/downloads", "2023", "test-post", "20230101_103000_test-post.html"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := makePath(tt.post, tt.outputFolder, tt.format)
+			result := makePath(tt.post, tt.outputFolder, tt.format, tt.layout)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -388,8 +410,8 @@ func TestFileHandling(t *testing.T) {
 
 	// Test path creation
 	testPost := lib.Post{PostDate: "2023-01-01T10:30:00.000Z", Slug: "test-post"}
-	path := makePath(testPost, tempDir, "html")
-	expectedPath := tempDir + "/20230101_103000_test-post.html"
+	path := makePath(testPost, tempDir, "html", "flat")
+	expectedPath := filepath.Join(tempDir, "20230101_103000_test-post.html")
 	assert.Equal(t, expectedPath, path)
 }
 

@@ -54,6 +54,7 @@ func serveUIHandler() http.Handler {
 	mux.HandleFunc("/", serveUIRoot)
 	mux.HandleFunc("/api/test-connection", serveTestConnection)
 	mux.HandleFunc("/api/preview", servePreview)
+	mux.HandleFunc("/api/rerun", serveRerun)
 	mux.HandleFunc("/api/jobs", serveJobs)
 	mux.HandleFunc("/api/jobs/", serveJobs)
 	return mux
@@ -1151,6 +1152,21 @@ const serveHTML = `<!DOCTYPE html>
               </div>
             </div>
             <div class="group">
+              <h3>Incremental sync</h3>
+              <p class="small">Check for new posts since your last run and rerun quickly.</p>
+              <div class="review-actions">
+                <button type="button" id="rerunCheckBtn">Check for updates</button>
+                <button type="button" id="rerunStartBtn" class="primary">Run incremental sync</button>
+              </div>
+              <div id="rerunStatus" class="test-status">No check run yet.</div>
+              <div id="rerunMetrics" class="preview-card" hidden>
+                <div class="preview-grid">
+                  <div class="preview-tile"><span>Last run</span><strong id="rerunLastRun">-</strong></div>
+                  <div class="preview-tile"><span>New posts</span><strong id="rerunNewPosts">0</strong></div>
+                </div>
+              </div>
+            </div>
+            <div class="group">
               <h3>Background job</h3>
               <p class="small">Run the download in the background with live progress and logs.</p>
               <div class="review-actions">
@@ -1229,6 +1245,12 @@ const serveHTML = `<!DOCTYPE html>
       const previewRefreshed = document.getElementById('previewRefreshed');
       const previewOldest = document.getElementById('previewOldest');
       const previewNewest = document.getElementById('previewNewest');
+      const rerunCheckBtn = document.getElementById('rerunCheckBtn');
+      const rerunStartBtn = document.getElementById('rerunStartBtn');
+      const rerunStatus = document.getElementById('rerunStatus');
+      const rerunMetrics = document.getElementById('rerunMetrics');
+      const rerunLastRun = document.getElementById('rerunLastRun');
+      const rerunNewPosts = document.getElementById('rerunNewPosts');
       const startJobBtn = document.getElementById('startJobBtn');
       const cancelJobBtn = document.getElementById('cancelJobBtn');
       const jobStatus = document.getElementById('jobStatus');
@@ -1631,6 +1653,18 @@ const serveHTML = `<!DOCTYPE html>
         jobStatus.className = klass;
       }
 
+      function setRerunStatus(message, state) {
+        if (!rerunStatus) return;
+        rerunStatus.textContent = message;
+        let klass = 'test-status';
+        if (state === 'ok') {
+          klass += ' ok';
+        } else if (state === 'bad') {
+          klass += ' bad';
+        }
+        rerunStatus.className = klass;
+      }
+
       function renderJobLogs(logs) {
         if (!jobLogs) return;
         jobLogs.innerHTML = '';
@@ -1783,6 +1817,105 @@ const serveHTML = `<!DOCTYPE html>
         };
       }
 
+      function collectRerunPayload() {
+        return {
+          publication_url: (urlInput && !urlInput.disabled) ? urlInput.value.trim() : '',
+          output: readValue('output'),
+          format: readValue('format'),
+          before: readValue('beforeDate'),
+          after: readValue('afterDate'),
+          rate: readValue('rate'),
+          max_workers: readValue('maxWorkers'),
+          proxy: (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : '',
+          cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
+          cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
+          cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
+          cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : ''
+        };
+      }
+
+      function startJobWithPayload(payload, statusMessage) {
+        setJobStatus(statusMessage || 'Starting download...', '');
+        setJobButtons(true);
+        if (jobLogs) jobLogs.innerHTML = '';
+        if (jobPosts) jobPosts.innerHTML = '';
+        if (jobMetrics) jobMetrics.hidden = false;
+
+        apiFetch('/api/jobs/start', payload).then(res => res.json()).then(data => {
+          if (data && data.error) {
+            setJobStatus(data.error, 'bad');
+            setJobButtons(false);
+            return;
+          }
+          activeJobId = data.id || '';
+          if (!activeJobId) {
+            setJobStatus('Failed to start job.', 'bad');
+            setJobButtons(false);
+            return;
+          }
+          setJobStatus('Download started.', '');
+          startJobPolling(activeJobId);
+        }).catch(err => {
+          setJobStatus('Failed to start job: ' + err, 'bad');
+          setJobButtons(false);
+        });
+      }
+
+      if (rerunCheckBtn) {
+        rerunCheckBtn.addEventListener('click', function () {
+          const errors = validateAndRender();
+          const urlValue = (urlInput ? urlInput.value : '').trim();
+          if (errors.length) {
+            setRerunStatus('Fix the highlighted fields before checking.', 'bad');
+            return;
+          }
+          if (!urlValue) {
+            setRerunStatus('Add a Substack URL before checking.', 'bad');
+            return;
+          }
+
+          rerunCheckBtn.disabled = true;
+          setRerunStatus('Checking for updates...', '');
+          if (rerunMetrics) rerunMetrics.hidden = true;
+
+          const payload = collectRerunPayload();
+          apiFetch('/api/rerun', payload).then(res => res.json()).then(data => {
+            if (data.ok) {
+              setRerunStatus('Incremental sync ready.', 'ok');
+            } else {
+              setRerunStatus((data.errors && data.errors.length) ? data.errors.join(' | ') : 'Update check failed.', 'bad');
+            }
+            if (rerunLastRun) rerunLastRun.textContent = data.last_run || '-';
+            if (rerunNewPosts) rerunNewPosts.textContent = String(data.new_posts || 0);
+            if (rerunMetrics) rerunMetrics.hidden = false;
+          }).catch(err => {
+            setRerunStatus('Update check failed: ' + err, 'bad');
+          }).finally(() => {
+            rerunCheckBtn.disabled = false;
+          });
+        });
+      }
+
+      if (rerunStartBtn) {
+        rerunStartBtn.addEventListener('click', function () {
+          const errors = validateAndRender();
+          const urlValue = (urlInput ? urlInput.value : '').trim();
+          if (errors.length) {
+            setRerunStatus('Fix the highlighted fields before starting.', 'bad');
+            return;
+          }
+          if (!urlValue) {
+            setRerunStatus('Add a Substack URL before starting.', 'bad');
+            return;
+          }
+
+          const payload = collectJobPayload();
+          payload.force = false;
+          payload.skip_existing = true;
+          startJobWithPayload(payload, 'Starting incremental sync...');
+        });
+      }
+
       if (startJobBtn) {
         startJobBtn.addEventListener('click', function () {
           const errors = validateAndRender();
@@ -1796,31 +1929,8 @@ const serveHTML = `<!DOCTYPE html>
             return;
           }
 
-          setJobStatus('Starting download...', '');
-          setJobButtons(true);
-          if (jobLogs) jobLogs.innerHTML = '';
-          if (jobPosts) jobPosts.innerHTML = '';
-          if (jobMetrics) jobMetrics.hidden = false;
-
           const payload = collectJobPayload();
-          apiFetch('/api/jobs/start', payload).then(res => res.json()).then(data => {
-            if (data && data.error) {
-              setJobStatus(data.error, 'bad');
-              setJobButtons(false);
-              return;
-            }
-            activeJobId = data.id || '';
-            if (!activeJobId) {
-              setJobStatus('Failed to start job.', 'bad');
-              setJobButtons(false);
-              return;
-            }
-            setJobStatus('Download started.', '');
-            startJobPolling(activeJobId);
-          }).catch(err => {
-            setJobStatus('Failed to start job: ' + err, 'bad');
-            setJobButtons(false);
-          });
+          startJobWithPayload(payload, 'Starting download...');
         });
       }
 

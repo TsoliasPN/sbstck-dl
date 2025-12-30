@@ -218,15 +218,17 @@ func (m *jobManager) start(req jobStartRequest) (*downloadJob, error) {
 		}
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	job := &downloadJob{
 		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 		Status:    jobRunning,
 		StartedAt: time.Now(),
 		postIndex: make(map[string]int),
+		cancel:    cancel,
 	}
 	m.jobs[job.ID] = job
 
-	go m.runJob(job, req)
+	go m.runJob(ctx, job, req)
 	return job, nil
 }
 
@@ -299,12 +301,7 @@ func (m *jobManager) cancel(jobID string) bool {
 	return true
 }
 
-func (m *jobManager) runJob(job *downloadJob, req jobStartRequest) {
-	ctx, cancel := context.WithCancel(context.Background())
-	m.mu.Lock()
-	job.cancel = cancel
-	m.mu.Unlock()
-
+func (m *jobManager) runJob(ctx context.Context, job *downloadJob, req jobStartRequest) {
 	if err := applyJobConfig(req, job); err != nil {
 		m.finishJob(job.ID, jobFailed, err)
 		return

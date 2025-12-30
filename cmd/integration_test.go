@@ -241,6 +241,12 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.Flags().Lookup("format"))
 	})
 
+	t.Run("serve command flags", func(t *testing.T) {
+		cmd := serveCmd
+
+		assert.NotNil(t, cmd.Flags().Lookup("port"))
+	})
+
 	t.Run("list command flags", func(t *testing.T) {
 		cmd := listCmd
 

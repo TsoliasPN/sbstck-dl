@@ -178,6 +178,25 @@ const serveHTML = `<!DOCTYPE html>
       margin-left: 6px;
       cursor: help;
     }
+    .error {
+      display: block;
+      min-height: 16px;
+      font-size: 12px;
+      color: #b91c1c;
+      margin-top: 4px;
+    }
+    .error-list {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: #b91c1c;
+      font-size: 13px;
+    }
+    .field.invalid input,
+    .field.invalid select,
+    .field.invalid textarea {
+      border-color: #fca5a5;
+      box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.2);
+    }
     .grid {
       display: grid;
       gap: 12px;
@@ -367,6 +386,7 @@ const serveHTML = `<!DOCTYPE html>
                 Substack URL <span class="flag">--url</span><span class="tip" title="Paste a publication URL or a single post URL.">?</span>
                 <input id="url" data-flag="--url" type="text" placeholder="https://example.substack.com" />
                 <span class="help">Example: https://example.substack.com or https://example.substack.com/p/post-title</span>
+                <span class="error" data-error-for="url"></span>
               </label>
               <label class="field">
                 Output directory <span class="flag">--output</span><span class="tip" title="Where downloaded files will be saved.">?</span>
@@ -430,10 +450,12 @@ const serveHTML = `<!DOCTYPE html>
               <label class="field">
                 After date <span class="flag">--after</span>
                 <input id="afterDate" data-flag="--after" type="text" placeholder="YYYY-MM-DD" />
+                <span class="error" data-error-for="afterDate"></span>
               </label>
               <label class="field">
                 Before date <span class="flag">--before</span>
                 <input id="beforeDate" data-flag="--before" type="text" placeholder="YYYY-MM-DD" />
+                <span class="error" data-error-for="beforeDate"></span>
               </label>
               <label class="field">
                 Layout <span class="flag">--layout</span>
@@ -500,6 +522,7 @@ const serveHTML = `<!DOCTYPE html>
               <label class="field advanced-only" data-advanced="true">
                 Proxy URL <span class="flag">--proxy</span>
                 <input id="proxy" data-flag="--proxy" type="text" placeholder="http://localhost:8080" />
+                <span class="error" data-error-for="proxy"></span>
               </label>
               <label class="field advanced-only" data-advanced="true">
                 Log format <span class="flag">--log-format</span>
@@ -556,6 +579,7 @@ const serveHTML = `<!DOCTYPE html>
               <span id="copyStatus" class="small"></span>
             </div>
             <div id="reviewStatus" class="hint">Tip: add a URL to target a single post or a publication.</div>
+            <ul id="validationErrors" class="error-list" hidden></ul>
           </div>
         </section>
       </form>
@@ -582,8 +606,17 @@ const serveHTML = `<!DOCTYPE html>
       const copyBtn = document.getElementById('copyBtn');
       const copyStatus = document.getElementById('copyStatus');
       const reviewStatus = document.getElementById('reviewStatus');
+      const errorList = document.getElementById('validationErrors');
       const presetInputs = Array.from(document.querySelectorAll('input[name="preset"]'));
       const advancedGroups = Array.from(document.querySelectorAll('[data-advanced="true"]'));
+      const errorTargets = {};
+      document.querySelectorAll('[data-error-for]').forEach(el => {
+        errorTargets[el.dataset.errorFor] = el;
+      });
+      const urlInput = document.getElementById('url');
+      const proxyInput = document.getElementById('proxy');
+      const afterDateInput = document.getElementById('afterDate');
+      const beforeDateInput = document.getElementById('beforeDate');
       let currentStep = 1;
       let activePreset = 'basic';
 
@@ -624,6 +657,72 @@ const serveHTML = `<!DOCTYPE html>
         return value;
       }
 
+      function setError(key, message) {
+        const target = errorTargets[key];
+        if (!target) return;
+        target.textContent = message || '';
+        const field = target.closest('.field');
+        if (field) field.classList.toggle('invalid', Boolean(message));
+      }
+
+      function validateURLField(value, label) {
+        if (!value) return '';
+        try {
+          const parsed = new URL(value);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return label + ' must start with http:// or https://.';
+          }
+          return '';
+        } catch (err) {
+          return label + ' must be a valid URL (include http:// or https://).';
+        }
+      }
+
+      function validateDateField(value, label) {
+        if (!value) return '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+          return label + ' must use YYYY-MM-DD (e.g. 2023-08-15).';
+        }
+        const parsed = Date.parse(value + 'T00:00:00');
+        if (!Number.isFinite(parsed)) {
+          return label + ' must be a valid calendar date.';
+        }
+        return '';
+      }
+
+      function validateAndRender() {
+        const errors = [];
+        const urlError = validateURLField((urlInput && !urlInput.disabled) ? urlInput.value.trim() : '', 'Substack URL');
+        setError('url', urlError);
+        if (urlError) errors.push(urlError);
+
+        const proxyValue = (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : '';
+        const proxyError = validateURLField(proxyValue, 'Proxy URL');
+        setError('proxy', proxyError);
+        if (proxyError) errors.push(proxyError);
+
+        const afterValue = (afterDateInput && !afterDateInput.disabled) ? afterDateInput.value.trim() : '';
+        const afterError = validateDateField(afterValue, 'After date');
+        setError('afterDate', afterError);
+        if (afterError) errors.push(afterError);
+
+        const beforeValue = (beforeDateInput && !beforeDateInput.disabled) ? beforeDateInput.value.trim() : '';
+        const beforeError = validateDateField(beforeValue, 'Before date');
+        setError('beforeDate', beforeError);
+        if (beforeError) errors.push(beforeError);
+
+        if (errorList) {
+          if (errors.length) {
+            errorList.hidden = false;
+            errorList.innerHTML = errors.map(err => '<li>' + err + '</li>').join('');
+          } else {
+            errorList.hidden = true;
+            errorList.innerHTML = '';
+          }
+        }
+        return errors;
+      }
+
       function buildCommand() {
         const parts = ['sbstck-dl', 'download'];
         const elements = Array.from(form.querySelectorAll('[data-flag]'));
@@ -651,8 +750,11 @@ const serveHTML = `<!DOCTYPE html>
 
         commandPreview.textContent = parts.join(' ');
 
-        const urlValue = (document.getElementById('url').value || '').trim();
-        if (!urlValue) {
+        const errors = validateAndRender();
+        const urlValue = (urlInput ? urlInput.value : '').trim();
+        if (errors.length) {
+          reviewStatus.textContent = 'Fix the highlighted fields to build a valid command.';
+        } else if (!urlValue) {
           reviewStatus.textContent = 'Add --url to target a single post or a publication.';
         } else {
           reviewStatus.textContent = 'Ready to run. Paste the command into your terminal.';

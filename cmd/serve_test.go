@@ -25,6 +25,9 @@ func TestServeUIRoot(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "Recommended defaults") {
 		t.Fatalf("expected recommended defaults hint in response")
 	}
+	if !strings.Contains(rec.Body.String(), "data-error-for=\"url\"") {
+		t.Fatalf("expected validation markers in response")
+	}
 }
 
 func TestServeUIRootNotFound(t *testing.T) {

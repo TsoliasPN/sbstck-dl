@@ -293,7 +293,7 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 - [x] (P0) Fix `--before/--after` date filtering to compare parsed dates (not string comparison)
 
 #### P1 — Performance & robustness
-- [ ] (P1) Speed up incremental reruns: avoid per-URL `Glob` scanning; pre-index existing downloads once
+- [x] (P1) Speed up incremental reruns: avoid per-URL `Glob` scanning; pre-index existing downloads once
 - [ ] (P1) Add `--concurrency/--max-workers` to control parallelism (and document how it interacts with `--rate`)
 - [ ] (P1) Add structured logs and a summary report (downloaded/skipped/failed)
 - [ ] (P1) Write a "failed URLs" file for retrying later

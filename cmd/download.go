@@ -484,6 +484,20 @@ var (
 					fmt.Printf("Archive page generated: %s/index.%s\n", outputFolder, format)
 				}
 			}
+
+			if createArchive {
+				if err := generateNotionIndex(outputFolder, format); err != nil {
+					if logFormat == logFormatJSON {
+						logEvent("notion_links.generate_failed", map[string]any{
+							"error": err.Error(),
+						})
+					} else if verbose {
+						log.Printf("Error generating Notion links index: %v\n", err)
+					}
+				} else if verbose {
+					fmt.Printf("Notion links index generated: %s/%s, %s/%s\n", outputFolder, notionLinksHTML, outputFolder, notionLinksMD)
+				}
+			}
 		},
 	}
 )

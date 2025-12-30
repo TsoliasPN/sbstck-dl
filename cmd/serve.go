@@ -20,6 +20,7 @@ import (
 
 var (
 	servePort   int
+	serveOpen   bool
 	uiCSRFToken string
 	serveCmd    = &cobra.Command{
 		Use:   "serve",
@@ -32,13 +33,28 @@ var (
 				uiCSRFToken = generateCSRFToken()
 			}
 			addr := fmt.Sprintf("127.0.0.1:%d", servePort)
+			uiURL := fmt.Sprintf("http://%s", addr)
 			server := &http.Server{
 				Addr:    addr,
 				Handler: serveUIHandler(),
 			}
 
-			fmt.Printf("UI running at http://%s (Ctrl+C to stop)\n", addr)
-			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- server.ListenAndServe()
+			}()
+
+			fmt.Printf("UI running at %s (Ctrl+C to stop)\n", uiURL)
+			if serveOpen {
+				go func() {
+					time.Sleep(200 * time.Millisecond)
+					if err := openBrowser(uiURL); err != nil {
+						log.Printf("Failed to open browser: %v\n", err)
+					}
+				}()
+			}
+
+			if err := <-errCh; err != nil && !errors.Is(err, http.ErrServerClosed) {
 				log.Fatalf("UI server failed: %v", err)
 			}
 		},
@@ -47,6 +63,7 @@ var (
 
 func init() {
 	serveCmd.Flags().IntVar(&servePort, "port", 8787, "Port to bind the local UI server")
+	serveCmd.Flags().BoolVar(&serveOpen, "open", false, "Open the UI in your default browser")
 }
 
 func serveUIHandler() http.Handler {

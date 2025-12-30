@@ -563,6 +563,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		Year             string
 		WordCount        int
 		EstimatedReadMin int
+		NotionCount      int
 	}
 
 	type archiveYearGroup struct {
@@ -606,6 +607,15 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			description = entry.Post.Description
 		}
 
+		notionCount := 0
+		if content, err := os.ReadFile(entry.FilePath); err == nil {
+			format := strings.TrimPrefix(strings.ToLower(filepath.Ext(entry.FilePath)), ".")
+			if format == "" {
+				format = "html"
+			}
+			notionCount = len(ExtractNotionLinks(string(content), format))
+		}
+
 		estimatedReadMin := 0
 		if entry.Post.WordCount > 0 {
 			estimatedReadMin = entry.Post.WordCount / 200
@@ -626,6 +636,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			Year:             year,
 			WordCount:        entry.Post.WordCount,
 			EstimatedReadMin: estimatedReadMin,
+			NotionCount:      notionCount,
 		}
 
 		idx, ok := yearGroupIndex[year]
@@ -831,6 +842,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			font-size: 12.5px;
 		}
 		.links a.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-weak); }
+		.links a.notion-badge { border-color: color-mix(in srgb, #0f172a 25%, var(--border)); background: color-mix(in srgb, #0f172a 12%, transparent); }
 		.links a:hover { box-shadow: var(--shadow-strong); transform: translateY(-0.5px); transition: 0.12s ease; }
 
 		.footer-note { margin-top: 22px; color: var(--muted); font-size: 12px; }
@@ -899,6 +911,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 									<div class="links">
 										<a class="primary" href="{{.RelPath}}">Open local</a>
 										{{if .CanonicalURL}}<a href="{{.CanonicalURL}}" target="_blank" rel="noreferrer">Open original</a>{{end}}
+										{{if gt .NotionCount 0}}<a class="notion-badge" href="notion-links.html" title="View Notion links list">Notion {{.NotionCount}}</a>{{end}}
 									</div>
 								</div>
 							</article>

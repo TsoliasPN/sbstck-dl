@@ -47,20 +47,25 @@ func buildNotionIndex(outputFolder string, format string) ([]notionPostLinks, er
 
 	posts := make([]notionPostLinks, 0)
 	for _, path := range paths {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
+		meta, _ := readMetadataSidecar(path)
 
-		links := extractNotionLinks(string(content), format)
+		var links []string
+		if meta.NotionLinks != nil {
+			links = meta.NotionLinks
+		} else {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			links = extractNotionLinks(string(content), format)
+		}
 		if len(links) == 0 {
 			continue
 		}
 
-		meta, _ := readMetadataSidecar(path)
 		title := meta.Title
 		if title == "" {
 			base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))

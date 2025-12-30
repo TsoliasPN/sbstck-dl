@@ -78,6 +78,13 @@ type previewResponsePayload struct {
 	Errors     []string `json:"errors"`
 }
 
+type rerunResponsePayload struct {
+	OK       bool     `json:"ok"`
+	LastRun  string   `json:"last_run"`
+	NewPosts int      `json:"new_posts"`
+	Errors   []string `json:"errors"`
+}
+
 func TestServeTestConnectionSuccess(t *testing.T) {
 	setTestCSRFToken()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +234,76 @@ func TestServePreviewCounts(t *testing.T) {
 	}
 	if resp.OldestDate != "2023-01-01" || resp.NewestDate != "2023-02-01" {
 		t.Fatalf("unexpected dates: %+v", resp)
+	}
+}
+
+func TestServeRerunNewPosts(t *testing.T) {
+	setTestCSRFToken()
+	var upstream *httptest.Server
+	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/sitemap.xml" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>` + upstream.URL + `/p/first</loc>
+    <lastmod>2023-01-01</lastmod>
+  </url>
+  <url>
+    <loc>` + upstream.URL + `/p/second</loc>
+    <lastmod>2023-02-01</lastmod>
+  </url>
+</urlset>`))
+	}))
+	defer upstream.Close()
+
+	tempDir := t.TempDir()
+	existingPath := filepath.Join(tempDir, "20230101_000000_first.html")
+	if err := os.WriteFile(existingPath, []byte("content"), 0644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	manifest := lib.NewManifest()
+	if err := manifest.UpdateEntry(upstream.URL+"/p/first", existingPath, tempDir, "html", time.Now(), "2023-01-01"); err != nil {
+		t.Fatalf("update manifest: %v", err)
+	}
+	if err := manifest.Save(filepath.Join(tempDir, lib.ManifestFilename)); err != nil {
+		t.Fatalf("save manifest: %v", err)
+	}
+
+	payload := map[string]any{
+		"publication_url": upstream.URL,
+		"output":          tempDir,
+		"format":          "html",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/rerun", bytes.NewReader(data))
+	addCSRFHeader(req)
+	rec := httptest.NewRecorder()
+	serveUIHandler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	var resp rerunResponsePayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("expected ok response, got %+v", resp)
+	}
+	if resp.NewPosts != 1 {
+		t.Fatalf("unexpected new posts count: %+v", resp)
+	}
+	if resp.LastRun == "" {
+		t.Fatalf("expected last_run to be set")
 	}
 }
 

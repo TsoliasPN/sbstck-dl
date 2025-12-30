@@ -371,6 +371,7 @@ It includes a step-by-step wizard with Basic and Advanced presets that map direc
 Inputs are validated for URL, proxy, and date formats with actionable error messages.
 Use the Test connection step to fetch `sitemap.xml` and verify a private post URL with your cookie.
 Use the Dry-run preview step to see counts, date range, and download/skip totals before running.
+Use the Incremental sync view to check your last run, see new posts, and rerun quickly.
 From the Review step you can run a background download job with live progress, logs, retries, and cancel controls.
 The UI backend exposes local-only `/api/...` endpoints and protects POSTs with a CSRF token.
 
@@ -459,7 +460,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Add a “Test connection” step (fetch `sitemap.xml`, verify cookie works for a known private post)
 - [x] (P2) Add a dry-run preview screen: posts count, newest/oldest dates, and what will be downloaded/skipped
 - [x] (P2) Run downloads as background jobs with live progress (per post), logs, retry stats, and a Cancel button
-- [ ] (P2) Add a “Rerun later”/incremental sync view (show last run, new posts since last run, run again)
+- [x] (P2) Add a “Rerun later”/incremental sync view (show last run, new posts since last run, run again)
 - [ ] (P2) Add profile management: save/load run presets and export/import a config file from the UI
 - [ ] (P2) Improve secret handling in UI: don’t persist cookies by default; optional secure storage (OS keychain/credential manager)
 - [ ] (P2) Add `--open` to auto-open the browser when starting the UI, and print the URL for manual open

@@ -41,6 +41,7 @@ type Config struct {
 	CookieVal      *string `json:"cookie_val,omitempty" yaml:"cookie_val,omitempty"`
 	CookieValFile  *string `json:"cookie_val_file,omitempty" yaml:"cookie_val_file,omitempty"`
 	CookieJar      *string `json:"cookie_jar,omitempty" yaml:"cookie_jar,omitempty"`
+	CookieKeychain *string `json:"cookie_keychain,omitempty" yaml:"cookie_keychain,omitempty"`
 	NotionLabels   *string `json:"notion_labels,omitempty" yaml:"notion_labels,omitempty"`
 	Verbose        *bool   `json:"verbose,omitempty" yaml:"verbose,omitempty"`
 	LogFormat      *string `json:"log_format,omitempty" yaml:"log_format,omitempty"`
@@ -194,6 +195,9 @@ func applyConfigToCommand(cmd *cobra.Command, cfg *Config) error {
 		return err
 	}
 	if err := setString(cmd, "cookie-jar", cfg.CookieJar); err != nil {
+		return err
+	}
+	if err := setString(cmd, "cookie-keychain", cfg.CookieKeychain); err != nil {
 		return err
 	}
 	if err := setString(cmd, "notion-labels", cfg.NotionLabels); err != nil {

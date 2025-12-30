@@ -54,6 +54,7 @@ func serveUIHandler() http.Handler {
 	mux.HandleFunc("/", serveUIRoot)
 	mux.HandleFunc("/api/test-connection", serveTestConnection)
 	mux.HandleFunc("/api/preview", servePreview)
+	mux.HandleFunc("/api/secret", serveSecret)
 	mux.HandleFunc("/api/rerun", serveRerun)
 	mux.HandleFunc("/api/jobs", serveJobs)
 	mux.HandleFunc("/api/jobs/", serveJobs)
@@ -77,6 +78,7 @@ type testConnectionRequest struct {
 	CookieVal      string `json:"cookie_val"`
 	CookieValFile  string `json:"cookie_val_file"`
 	CookieJar      string `json:"cookie_jar"`
+	CookieKeychain string `json:"cookie_keychain"`
 	Proxy          string `json:"proxy"`
 }
 
@@ -107,6 +109,7 @@ type previewRequest struct {
 	CookieVal      string `json:"cookie_val"`
 	CookieValFile  string `json:"cookie_val_file"`
 	CookieJar      string `json:"cookie_jar"`
+	CookieKeychain string `json:"cookie_keychain"`
 }
 
 type previewResponse struct {
@@ -265,10 +268,11 @@ func servePreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie, cookieErrors := resolveTestCookie(testConnectionRequest{
-		CookieName:    req.CookieName,
-		CookieVal:     req.CookieVal,
-		CookieValFile: req.CookieValFile,
-		CookieJar:     req.CookieJar,
+		CookieName:     req.CookieName,
+		CookieVal:      req.CookieVal,
+		CookieValFile:  req.CookieValFile,
+		CookieJar:      req.CookieJar,
+		CookieKeychain: req.CookieKeychain,
 	}, domainHint)
 	errorsList = append(errorsList, cookieErrors...)
 
@@ -366,6 +370,15 @@ func resolveTestCookie(req testConnectionRequest, domainHint string) (*http.Cook
 	cookieVal, err := resolveCookieValue(strings.TrimSpace(req.CookieVal), strings.TrimSpace(req.CookieValFile))
 	if err != nil {
 		errorsList = append(errorsList, fmt.Sprintf("Failed to read cookie value: %v", err))
+	}
+
+	if cookieVal == "" && strings.TrimSpace(req.CookieKeychain) != "" {
+		value, err := secretStore.Get(strings.TrimSpace(req.CookieKeychain))
+		if err != nil {
+			errorsList = append(errorsList, fmt.Sprintf("Failed to read cookie from keychain: %v", err))
+		} else {
+			cookieVal = value
+		}
 	}
 
 	if cookieVal == "" && strings.TrimSpace(req.CookieJar) != "" {
@@ -1127,6 +1140,15 @@ const serveHTML = `<!DOCTYPE html>
                 <input id="cookieJar" data-flag="--cookie-jar" type="text" placeholder="path/to/cookies.txt" />
               </label>
               <label class="field">
+                Keychain entry <span class="flag">--cookie-keychain</span>
+                <input id="cookieKeychain" data-flag="--cookie-keychain" type="text" placeholder="my-substack-cookie" />
+                <span class="help">Stores only the cookie value in your OS keychain.</span>
+              </label>
+              <div>
+                <button type="button" id="saveCookieBtn">Save cookie to keychain</button>
+                <div id="cookieStoreStatus" class="test-status">No keychain entry saved.</div>
+              </div>
+              <label class="field">
                 Notion labels <span class="flag">--notion-labels</span>
                 <input id="notionLabels" data-flag="--notion-labels" type="text" placeholder="path/to/notion-labels.yaml" />
               </label>
@@ -1325,6 +1347,9 @@ const serveHTML = `<!DOCTYPE html>
       const cookieValInput = document.getElementById('cookieVal');
       const cookieValFileInput = document.getElementById('cookieValFile');
       const cookieJarInput = document.getElementById('cookieJar');
+      const cookieKeychainInput = document.getElementById('cookieKeychain');
+      const saveCookieBtn = document.getElementById('saveCookieBtn');
+      const cookieStoreStatus = document.getElementById('cookieStoreStatus');
       let currentStep = 1;
       let activePreset = 'basic';
       let activeJobId = '';
@@ -1572,6 +1597,7 @@ const serveHTML = `<!DOCTYPE html>
             cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
             cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
             cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+            cookie_keychain: (cookieKeychainInput && !cookieKeychainInput.disabled) ? cookieKeychainInput.value : '',
             proxy: (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : ''
           };
 
@@ -1645,7 +1671,8 @@ const serveHTML = `<!DOCTYPE html>
             cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
             cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
             cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
-            cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : ''
+            cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+            cookie_keychain: (cookieKeychainInput && !cookieKeychainInput.disabled) ? cookieKeychainInput.value : ''
           };
 
           previewBtn.disabled = true;
@@ -1734,6 +1761,18 @@ const serveHTML = `<!DOCTYPE html>
           klass += ' bad';
         }
         profileStatus.className = klass;
+      }
+
+      function setCookieStoreStatus(message, state) {
+        if (!cookieStoreStatus) return;
+        cookieStoreStatus.textContent = message;
+        let klass = 'test-status';
+        if (state === 'ok') {
+          klass += ' ok';
+        } else if (state === 'bad') {
+          klass += ' bad';
+        }
+        cookieStoreStatus.className = klass;
       }
 
       function renderJobLogs(logs) {
@@ -1883,6 +1922,7 @@ const serveHTML = `<!DOCTYPE html>
           cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
           cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
           cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+          cookie_keychain: (cookieKeychainInput && !cookieKeychainInput.disabled) ? cookieKeychainInput.value : '',
           notion_labels: readValue('notionLabels'),
           verbose: readChecked('verbose')
         };
@@ -1918,6 +1958,7 @@ const serveHTML = `<!DOCTYPE html>
           cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
           cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
           cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+          cookie_keychain: (cookieKeychainInput && !cookieKeychainInput.disabled) ? cookieKeychainInput.value : '',
           notion_labels: readValue('notionLabels'),
           log_format: readValue('logFormat'),
           verbose: readChecked('verbose')
@@ -1931,7 +1972,6 @@ const serveHTML = `<!DOCTYPE html>
         }
 
         if (!includeSecrets) {
-          delete config.cookie_name;
           delete config.cookie_val;
           delete config.cookie_val_file;
           delete config.cookie_jar;
@@ -1945,7 +1985,7 @@ const serveHTML = `<!DOCTYPE html>
           'after', 'before', 'layout', 'write_metadata', 'add_source_url',
           'dry_run', 'force', 'skip_existing', 'refresh_updated',
           'fail_fast', 'continue_on_error', 'proxy', 'log_format',
-          'cookie_name', 'cookie_val', 'cookie_val_file', 'cookie_jar',
+          'cookie_name', 'cookie_val', 'cookie_val_file', 'cookie_jar', 'cookie_keychain',
           'notion_labels', 'verbose'
         ];
         return advancedKeys.some(key => {
@@ -2016,6 +2056,7 @@ const serveHTML = `<!DOCTYPE html>
         setValue('cookieVal', config.cookie_val);
         setValue('cookieValFile', config.cookie_val_file);
         setValue('cookieJar', config.cookie_jar);
+        setValue('cookieKeychain', config.cookie_keychain);
         setValue('notionLabels', config.notion_labels);
         setValue('logFormat', config.log_format);
         setChecked('verbose', config.verbose);
@@ -2144,6 +2185,41 @@ const serveHTML = `<!DOCTYPE html>
         });
       }
 
+      if (saveCookieBtn) {
+        saveCookieBtn.addEventListener('click', function () {
+          const key = (cookieKeychainInput && !cookieKeychainInput.disabled) ? cookieKeychainInput.value.trim() : '';
+          const cookieVal = (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '';
+          const cookieValFile = (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '';
+          if (!key) {
+            setCookieStoreStatus('Provide a keychain entry name first.', 'bad');
+            return;
+          }
+          if (!cookieVal && !cookieValFile) {
+            setCookieStoreStatus('Provide a cookie value or file to store.', 'bad');
+            return;
+          }
+
+          saveCookieBtn.disabled = true;
+          setCookieStoreStatus('Saving to keychain...', '');
+
+          apiFetch('/api/secret', {
+            key: key,
+            cookie_val: cookieVal,
+            cookie_val_file: cookieValFile
+          }).then(res => res.json()).then(data => {
+            if (data && data.ok) {
+              setCookieStoreStatus('Saved to keychain.', 'ok');
+            } else {
+              setCookieStoreStatus((data && data.error) ? data.error : 'Failed to save to keychain.', 'bad');
+            }
+          }).catch(err => {
+            setCookieStoreStatus('Failed to save to keychain: ' + err, 'bad');
+          }).finally(() => {
+            saveCookieBtn.disabled = false;
+          });
+        });
+      }
+
       function collectRerunPayload() {
         return {
           publication_url: (urlInput && !urlInput.disabled) ? urlInput.value.trim() : '',
@@ -2157,7 +2233,8 @@ const serveHTML = `<!DOCTYPE html>
           cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
           cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
           cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
-          cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : ''
+          cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : '',
+          cookie_keychain: (cookieKeychainInput && !cookieKeychainInput.disabled) ? cookieKeychainInput.value : ''
         };
       }
 

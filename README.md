@@ -42,6 +42,7 @@ Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --cookie-keychain string   Read cookie value from OS keychain/credential manager
       --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
   -h, --help                     help for sbstck-dl
       --concurrency int          Alias for --max-workers
@@ -102,6 +103,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --cookie-keychain string   Read cookie value from OS keychain/credential manager
       --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
@@ -314,6 +316,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --cookie-keychain string   Read cookie value from OS keychain/credential manager
       --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
@@ -332,6 +335,7 @@ Once you have the cookie name and value, you can pass them to the downloader usi
 To avoid storing secrets in shell history, you can also set `SBSTCK_COOKIE_VAL` and omit `--cookie_val`.
 You can also read the cookie value from a file using `--cookie-val-file`.
 You can also provide a Netscape cookie jar (`cookies.txt`) using `--cookie-jar`.
+You can also read the cookie value from your OS keychain using `--cookie-keychain`.
 
 #### Example
 
@@ -358,6 +362,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --cookie-keychain string   Read cookie value from OS keychain/credential manager
       --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
@@ -376,6 +381,7 @@ Use the Test connection step to fetch `sitemap.xml` and verify a private post UR
 Use the Dry-run preview step to see counts, date range, and download/skip totals before running.
 Use the Incremental sync view to check your last run, see new posts, and rerun quickly.
 Use Profiles and config to save presets locally or export/import a JSON config file for the CLI.
+Profiles avoid storing cookie values by default. You can optionally save cookie values to the OS keychain and reference them by name in the UI.
 From the Review step you can run a background download job with live progress, logs, retries, and cancel controls.
 The UI backend exposes local-only `/api/...` endpoints and protects POSTs with a CSRF token.
 
@@ -394,6 +400,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --cookie-keychain string   Read cookie value from OS keychain/credential manager
       --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
@@ -467,7 +474,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Run downloads as background jobs with live progress (per post), logs, retry stats, and a Cancel button
 - [x] (P2) Add a “Rerun later”/incremental sync view (show last run, new posts since last run, run again)
 - [x] (P2) Add profile management: save/load run presets and export/import a config file from the UI
-- [ ] (P2) Improve secret handling in UI: don’t persist cookies by default; optional secure storage (OS keychain/credential manager)
+- [x] (P2) Improve secret handling in UI: don’t persist cookies by default; optional secure storage (OS keychain/credential manager)
 - [ ] (P2) Add `--open` to auto-open the browser when starting the UI, and print the URL for manual open
 - [ ] (P2) Bundle UI assets into the binary (Go `embed`) so the UI ships as a single executable
 - [x] (P2) Expose a small local API (`/api/...`) for list/download/status, with basic hardening (CSRF token, no remote bind)

@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,5 +88,57 @@ func TestBuildNotionIndexUsesSidecar(t *testing.T) {
 	}
 	if len(posts[0].Links) != 1 || posts[0].Links[0] != "https://notion.so/Workspace/Page-123" {
 		t.Fatalf("unexpected links: %+v", posts[0].Links)
+	}
+}
+
+func TestWriteNotionIndexMarkdownWithLabels(t *testing.T) {
+	tempDir := t.TempDir()
+	posts := []notionPostLinks{
+		{
+			Title:   "Post",
+			RelPath: "post.html",
+			Links:   []string{"https://notion.so/Workspace/Page-123"},
+		},
+	}
+	labels := map[string]string{
+		"https://notion.so/Workspace/Page-123": "Project Plan",
+	}
+
+	if err := writeNotionIndexMarkdown(tempDir, posts, labels); err != nil {
+		t.Fatalf("writeNotionIndexMarkdown error: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(tempDir, notionLinksMD))
+	if err != nil {
+		t.Fatalf("read output error: %v", err)
+	}
+	if !strings.Contains(string(content), "- [Project Plan](https://notion.so/Workspace/Page-123)") {
+		t.Fatalf("expected label in markdown output")
+	}
+}
+
+func TestWriteNotionIndexHTMLWithLabels(t *testing.T) {
+	tempDir := t.TempDir()
+	posts := []notionPostLinks{
+		{
+			Title:   "Post",
+			RelPath: "post.html",
+			Links:   []string{"https://notion.so/Workspace/Page-123"},
+		},
+	}
+	labels := map[string]string{
+		"https://notion.so/Workspace/Page-123": "Project Plan",
+	}
+
+	if err := writeNotionIndexHTML(tempDir, posts, labels); err != nil {
+		t.Fatalf("writeNotionIndexHTML error: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(tempDir, notionLinksHTML))
+	if err != nil {
+		t.Fatalf("read output error: %v", err)
+	}
+	if !strings.Contains(string(content), ">Project Plan<") {
+		t.Fatalf("expected label in HTML output")
 	}
 }

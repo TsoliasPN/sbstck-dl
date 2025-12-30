@@ -39,6 +39,8 @@ Flags:
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
   -h, --help                     help for sbstck-dl
+      --concurrency int          Alias for --max-workers
+      --max-workers int          Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
   -x, --proxy string             Specify the proxy url
   -r, --rate int                 Specify the rate of requests per second (default 2)
   -v, --verbose                  Enable verbose output
@@ -80,6 +82,8 @@ Global Flags:
       --before string   Download posts published before this date (format: YYYY-MM-DD)
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
+      --concurrency int  Alias for --max-workers
+      --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
   -x, --proxy string    Specify the proxy url
   -r, --rate int        Specify the rate of requests per second (default 2)
   -v, --verbose         Enable verbose output
@@ -261,6 +265,8 @@ Global Flags:
       --before string   Download posts published before this date (format: YYYY-MM-DD)
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters)
+      --concurrency int  Alias for --max-workers
+      --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
   -x, --proxy string    Specify the proxy url
   -r, --rate int        Specify the rate of requests per second (default 2)
   -v, --verbose         Enable verbose output
@@ -294,7 +300,7 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 
 #### P1 — Performance & robustness
 - [x] (P1) Speed up incremental reruns: avoid per-URL `Glob` scanning; pre-index existing downloads once
-- [ ] (P1) Add `--concurrency/--max-workers` to control parallelism (and document how it interacts with `--rate`)
+- [x] (P1) Add `--concurrency/--max-workers` to control parallelism (and document how it interacts with `--rate`)
 - [ ] (P1) Add structured logs and a summary report (downloaded/skipped/failed)
 - [ ] (P1) Write a "failed URLs" file for retrying later
 - [ ] (P1) Add `--fail-fast` / `--continue-on-error` behavior switches

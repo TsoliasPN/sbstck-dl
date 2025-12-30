@@ -71,7 +71,7 @@ func TestParseURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := parseURL(tt.input)
-			
+
 			if tt.expectError {
 				// For this specific case, parseURL returns nil, nil which means no error but also no result
 				if result == nil {
@@ -115,11 +115,12 @@ func TestMakeDateFilterFunc(t *testing.T) {
 			beforeDate: "2023-06-15",
 			afterDate:  "",
 			testDates: map[string]bool{
-				"2023-01-01": true,
-				"2023-06-14": true,
-				"2023-06-15": false,
-				"2023-06-16": false,
-				"2023-12-31": false,
+				"2023-01-01":           true,
+				"2023-06-14":           true,
+				"2023-06-15":           false,
+				"2023-06-15T10:00:00Z": false,
+				"2023-06-16":           false,
+				"2023-12-31":           false,
 			},
 		},
 		{
@@ -127,11 +128,12 @@ func TestMakeDateFilterFunc(t *testing.T) {
 			beforeDate: "",
 			afterDate:  "2023-06-15",
 			testDates: map[string]bool{
-				"2023-01-01": false,
-				"2023-06-14": false,
-				"2023-06-15": false,
-				"2023-06-16": true,
-				"2023-12-31": true,
+				"2023-01-01":           false,
+				"2023-06-14":           false,
+				"2023-06-15":           false,
+				"2023-06-15T10:00:00Z": true,
+				"2023-06-16":           true,
+				"2023-12-31":           true,
 			},
 		},
 		{
@@ -139,12 +141,14 @@ func TestMakeDateFilterFunc(t *testing.T) {
 			beforeDate: "2023-12-31",
 			afterDate:  "2023-01-01",
 			testDates: map[string]bool{
-				"2022-12-31": false,
-				"2023-01-01": false,
-				"2023-06-15": true,
-				"2023-12-30": true,
-				"2023-12-31": false,
-				"2024-01-01": false,
+				"2022-12-31":           false,
+				"2023-01-01":           false,
+				"2023-01-01T10:00:00Z": true,
+				"2023-06-15":           true,
+				"2023-12-30":           true,
+				"2023-12-31":           false,
+				"2023-12-31T00:00:01Z": false,
+				"2024-01-01":           false,
 			},
 		},
 	}
@@ -152,13 +156,13 @@ func TestMakeDateFilterFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filterFunc := makeDateFilterFunc(tt.beforeDate, tt.afterDate)
-			
+
 			if tt.beforeDate == "" && tt.afterDate == "" {
 				// No filter should return nil
 				assert.Nil(t, filterFunc)
 			} else {
 				require.NotNil(t, filterFunc)
-				
+
 				for date, expected := range tt.testDates {
 					result := filterFunc(date)
 					assert.Equal(t, expected, result, "Date %s should return %v", date, expected)
@@ -228,7 +232,7 @@ func TestConvertDateTime(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "basic date", 
+			name:     "basic date",
 			input:    "2023-01-01",
 			expected: "", // Invalid format, should return empty string
 		},
@@ -323,7 +327,7 @@ func TestCookieName(t *testing.T) {
 
 	t.Run("Set method - valid values", func(t *testing.T) {
 		validNames := []string{"substack.sid", "connect.sid"}
-		
+
 		for _, name := range validNames {
 			cn := cookieName("")
 			err := cn.Set(name)
@@ -334,7 +338,7 @@ func TestCookieName(t *testing.T) {
 
 	t.Run("Set method - invalid values", func(t *testing.T) {
 		invalidNames := []string{"invalid", "session", "auth", ""}
-		
+
 		for _, name := range invalidNames {
 			cn := cookieName("")
 			err := cn.Set(name)
@@ -348,7 +352,7 @@ func TestCookieName(t *testing.T) {
 func TestFileHandling(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
-	
+
 	// Create a test file
 	existingFile := tempDir + "/existing.html"
 	post := lib.Post{Title: "Test", BodyHTML: "<p>Test content</p>"}
@@ -358,7 +362,7 @@ func TestFileHandling(t *testing.T) {
 	// Test that file was created successfully
 	_, err = os.Stat(existingFile)
 	assert.NoError(t, err)
-	
+
 	// Test path creation
 	testPost := lib.Post{PostDate: "2023-01-01T10:30:00.000Z", Slug: "test-post"}
 	path := makePath(testPost, tempDir, "html")
@@ -393,14 +397,15 @@ func TestDateFilteringIntegration(t *testing.T) {
 		// Test the interaction between date filtering and URL processing
 		beforeDate := "2023-06-15"
 		afterDate := "2023-01-01"
-		
+
 		filterFunc := makeDateFilterFunc(beforeDate, afterDate)
 		require.NotNil(t, filterFunc)
-		
+
 		// Test dates within range
 		assert.True(t, filterFunc("2023-03-15"))
+		assert.True(t, filterFunc("2023-03-15T12:00:00Z"))
 		assert.True(t, filterFunc("2023-06-14"))
-		
+
 		// Test dates outside range
 		assert.False(t, filterFunc("2022-12-31"))
 		assert.False(t, filterFunc("2023-01-01"))

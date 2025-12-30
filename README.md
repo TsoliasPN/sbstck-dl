@@ -53,6 +53,8 @@ You can provide the url of a single post or the main url of the Substack you wan
 By providing the main URL of a Substack, the downloader will download all the posts of the archive.
 
 When downloading the full archive, if the downloader is interrupted, at the next execution it will resume the download of the remaining posts.
+A `manifest.json` file is written in the output directory with canonical URLs, local paths, download times, and content hashes.
+On reruns, URLs already recorded in the manifest (with matching format and existing file) are skipped.
 
 ```bash
 Usage:
@@ -286,9 +288,9 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 ### Roadmap
 
 #### P0 — Incremental reruns & correctness
-- [ ] (P0) Add a download manifest (canonical URL -> local path, timestamps, hashes) for reliable incremental sync
-- [ ] (P0) Optimize reruns: reliably skip already-downloaded posts and only fetch new ones (beyond slug matching)
-- [ ] (P0) Fix `--before/--after` date filtering to compare parsed dates (not string comparison)
+- [x] (P0) Add a download manifest (canonical URL -> local path, timestamps, hashes) for reliable incremental sync
+- [x] (P0) Optimize reruns: reliably skip already-downloaded posts and only fetch new ones (beyond slug matching)
+- [x] (P0) Fix `--before/--after` date filtering to compare parsed dates (not string comparison)
 
 #### P1 — Performance & robustness
 - [ ] (P1) Speed up incremental reruns: avoid per-URL `Glob` scanning; pre-index existing downloads once

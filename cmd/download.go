@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -33,7 +34,34 @@ var (
 		Long:  `You can provide the url of a single post or the main url of the Substack you want to download.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			startTime := time.Now()
-			
+
+			manifestPath := filepath.Join(outputFolder, lib.ManifestFilename)
+			manifest, err := lib.LoadManifest(manifestPath)
+			if err != nil {
+				log.Printf("Error loading manifest: %v\n", err)
+				manifest = lib.NewManifest()
+			}
+
+			updateManifest := func(post lib.Post, path string, downloadedAt time.Time) {
+				if manifest == nil {
+					return
+				}
+				canonicalURL := post.CanonicalUrl
+				if canonicalURL == "" {
+					if verbose {
+						log.Printf("Skipping manifest entry for %s: missing canonical URL\n", post.Slug)
+					}
+					return
+				}
+				if err := manifest.UpdateEntry(canonicalURL, path, outputFolder, format, downloadedAt); err != nil {
+					log.Printf("Error updating manifest for %s: %v\n", canonicalURL, err)
+					return
+				}
+				if err := manifest.Save(manifestPath); err != nil {
+					log.Printf("Error saving manifest: %v\n", err)
+				}
+			}
+
 			// Create archive instance if flag is set
 			var archive *lib.Archive
 			if createArchive {
@@ -67,6 +95,7 @@ var (
 					fmt.Printf("Writing post to file %s\n", path)
 				}
 
+				var writeErr error
 				if downloadImages || downloadFiles {
 					imageQualityEnum := lib.ImageQuality(imageQuality)
 					// Parse file extensions if specified
@@ -75,16 +104,21 @@ var (
 						fileExtensionsSlice = strings.Split(strings.ReplaceAll(fileExtensions, " ", ""), ",")
 					}
 					imageResult, err := post.WriteToFileWithImages(ctx, path, format, addSourceURL, downloadImages, imageQualityEnum, imagesDir, downloadFiles, fileExtensionsSlice, filesDir, fetcher)
-					if err != nil {
-						log.Printf("Error writing file %s: %v\n", path, err)
+					writeErr = err
+					if writeErr != nil {
+						log.Printf("Error writing file %s: %v\n", path, writeErr)
 					} else if verbose && imageResult.Success > 0 {
 						fmt.Printf("Downloaded %d images (%d failed) for post %s\n", imageResult.Success, imageResult.Failed, post.Slug)
 					}
 				} else {
-					err = post.WriteToFile(path, format, addSourceURL)
-					if err != nil {
-						log.Printf("Error writing file %s: %v\n", path, err)
+					writeErr = post.WriteToFile(path, format, addSourceURL)
+					if writeErr != nil {
+						log.Printf("Error writing file %s: %v\n", path, writeErr)
 					}
+				}
+
+				if writeErr == nil {
+					updateManifest(post, path, time.Now())
 				}
 
 				// Add to archive if enabled
@@ -159,6 +193,7 @@ var (
 						fmt.Printf("Writing post to file %s\n", path)
 					}
 
+					var writeErr error
 					if downloadImages || downloadFiles {
 						imageQualityEnum := lib.ImageQuality(imageQuality)
 						// Parse file extensions if specified
@@ -167,16 +202,21 @@ var (
 							fileExtensionsSlice = strings.Split(strings.ReplaceAll(fileExtensions, " ", ""), ",")
 						}
 						imageResult, err := post.WriteToFileWithImages(ctx, path, format, addSourceURL, downloadImages, imageQualityEnum, imagesDir, downloadFiles, fileExtensionsSlice, filesDir, fetcher)
-						if err != nil {
-							log.Printf("Error writing file %s: %v\n", path, err)
+						writeErr = err
+						if writeErr != nil {
+							log.Printf("Error writing file %s: %v\n", path, writeErr)
 						} else if verbose && imageResult.Success > 0 {
 							fmt.Printf("Downloaded %d images (%d failed) for post %s\n", imageResult.Success, imageResult.Failed, post.Slug)
 						}
 					} else {
-						err = post.WriteToFile(path, format, addSourceURL)
-						if err != nil {
-							log.Printf("Error writing file %s: %v\n", path, err)
+						writeErr = post.WriteToFile(path, format, addSourceURL)
+						if writeErr != nil {
+							log.Printf("Error writing file %s: %v\n", path, writeErr)
 						}
+					}
+
+					if writeErr == nil {
+						updateManifest(post, path, time.Now())
 					}
 
 					// Add to archive if enabled and post was successfully written
@@ -195,7 +235,7 @@ var (
 				if verbose {
 					fmt.Printf("Generating archive page in %s format...\n", format)
 				}
-				
+
 				var archiveErr error
 				switch format {
 				case "html":
@@ -207,7 +247,7 @@ var (
 				default:
 					archiveErr = fmt.Errorf("unknown format for archive: %s", format)
 				}
-				
+
 				if archiveErr != nil {
 					log.Printf("Error generating archive page: %v\n", archiveErr)
 				} else if verbose {
@@ -276,19 +316,47 @@ func extractSlug(url string) string {
 }
 
 // filterExistingPosts filters out posts that already exist in the output folder.
-// It looks for files whose name ends with the post slug.
+// It prefers a manifest match by canonical URL, then falls back to slug matching.
 func filterExistingPosts(urls []string, outputFolder string, format string) ([]string, error) {
+	var firstErr error
+	manifestPath := filepath.Join(outputFolder, lib.ManifestFilename)
+	manifest, err := lib.LoadManifest(manifestPath)
+	if err != nil {
+		firstErr = err
+		manifest = nil
+	}
+
 	var filtered []string
 	for _, url := range urls {
+		if manifest != nil {
+			if entry, ok := manifest.Entries[url]; ok {
+				if entry.Format == "" || entry.Format == format {
+					entryPath := filepath.FromSlash(entry.FilePath)
+					if entryPath != "" && !filepath.IsAbs(entryPath) {
+						entryPath = filepath.Join(outputFolder, entryPath)
+					}
+					if entryPath != "" {
+						if _, statErr := os.Stat(entryPath); statErr == nil {
+							continue
+						}
+					}
+				}
+			}
+		}
+
 		slug := extractSlug(url)
 		path := fmt.Sprintf("%s/%s_%s.%s", outputFolder, "*", slug, format)
-		matches, err := filepath.Glob(path)
-		if err != nil {
-			return urls, err
+		matches, globErr := filepath.Glob(path)
+		if globErr != nil {
+			if firstErr == nil {
+				firstErr = globErr
+			}
+			filtered = append(filtered, url)
+			continue
 		}
 		if len(matches) == 0 {
 			filtered = append(filtered, url)
 		}
 	}
-	return filtered, nil
+	return filtered, firstErr
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/alexferrari88/sbstck-dl/lib"
 	"github.com/spf13/cobra"
@@ -117,19 +118,49 @@ func init() {
 }
 
 func makeDateFilterFunc(beforeDate string, afterDate string) lib.DateFilterFunc {
-	var dateFilterFunc lib.DateFilterFunc
-	if beforeDate != "" && afterDate != "" {
-		dateFilterFunc = func(date string) bool {
-			return date > afterDate && date < beforeDate
+	before, beforeSet := parseDateInput(beforeDate)
+	if beforeDate != "" && !beforeSet {
+		log.Printf("Invalid --before date %q, ignoring it\n", beforeDate)
+	}
+
+	after, afterSet := parseDateInput(afterDate)
+	if afterDate != "" && !afterSet {
+		log.Printf("Invalid --after date %q, ignoring it\n", afterDate)
+	}
+
+	if !beforeSet && !afterSet {
+		return nil
+	}
+
+	return func(date string) bool {
+		parsed, ok := parseDateInput(date)
+		if !ok {
+			return false
 		}
-	} else if beforeDate != "" {
-		dateFilterFunc = func(date string) bool {
-			return date < beforeDate
+
+		if beforeSet && !parsed.Before(before) {
+			return false
 		}
-	} else if afterDate != "" {
-		dateFilterFunc = func(date string) bool {
-			return date > afterDate
+		if afterSet && !parsed.After(after) {
+			return false
+		}
+		return true
+	}
+}
+
+func parseDateInput(value string) (time.Time, bool) {
+	if value == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, true
 		}
 	}
-	return dateFilterFunc
+	return time.Time{}, false
 }

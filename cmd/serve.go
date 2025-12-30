@@ -160,6 +160,24 @@ const serveHTML = `<!DOCTYPE html>
       font-size: 16px;
       color: var(--ink);
     }
+    .help {
+      font-size: 12px;
+      color: #64748b;
+    }
+    .tip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 1px solid #fed7aa;
+      background: #fff7ed;
+      color: var(--accent-dark);
+      font-size: 11px;
+      margin-left: 6px;
+      cursor: help;
+    }
     .grid {
       display: grid;
       gap: 12px;
@@ -340,25 +358,29 @@ const serveHTML = `<!DOCTYPE html>
 
         <section class="step-panel" data-step="2">
           <h2>Configure the download</h2>
+          <p class="small">Recommended defaults: format html, rate 2, max-workers 10. Enable images/files for offline archives.</p>
 
           <div class="group">
             <h3>Core</h3>
             <div class="grid">
               <label class="field">
-                Substack URL <span class="flag">--url</span>
+                Substack URL <span class="flag">--url</span><span class="tip" title="Paste a publication URL or a single post URL.">?</span>
                 <input id="url" data-flag="--url" type="text" placeholder="https://example.substack.com" />
+                <span class="help">Example: https://example.substack.com or https://example.substack.com/p/post-title</span>
               </label>
               <label class="field">
-                Output directory <span class="flag">--output</span>
+                Output directory <span class="flag">--output</span><span class="tip" title="Where downloaded files will be saved.">?</span>
                 <input id="output" data-flag="--output" type="text" placeholder="." />
+                <span class="help">Use "." for the current folder.</span>
               </label>
               <label class="field">
-                Format <span class="flag">--format</span>
+                Format <span class="flag">--format</span><span class="tip" title="HTML is recommended for full fidelity.">?</span>
                 <select id="format" data-flag="--format" data-default="html">
                   <option value="html" selected>html</option>
                   <option value="md">md</option>
                   <option value="txt">txt</option>
                 </select>
+                <span class="help">Recommended: html.</span>
               </label>
             </div>
           </div>
@@ -372,19 +394,20 @@ const serveHTML = `<!DOCTYPE html>
               </label>
               <label class="toggle-row">
                 <input id="downloadImages" data-flag="--download-images" type="checkbox" />
-                Download images locally <span class="flag">--download-images</span>
+                Download images locally <span class="flag">--download-images</span><span class="tip" title="Recommended for offline browsing.">?</span>
               </label>
               <label class="toggle-row">
                 <input id="downloadFiles" data-flag="--download-files" type="checkbox" />
-                Download files locally <span class="flag">--download-files</span>
+                Download files locally <span class="flag">--download-files</span><span class="tip" title="Recommended if posts include attachments.">?</span>
               </label>
               <label class="field">
-                Image quality <span class="flag">--image-quality</span>
+                Image quality <span class="flag">--image-quality</span><span class="tip" title="High is best quality but larger downloads.">?</span>
                 <select id="imageQuality" data-flag="--image-quality" data-default="high" data-requires="downloadImages">
                   <option value="high" selected>high</option>
                   <option value="medium">medium</option>
                   <option value="low">low</option>
                 </select>
+                <span class="help">Recommended: high.</span>
               </label>
               <label class="field">
                 Images directory <span class="flag">--images-dir</span>
@@ -465,12 +488,14 @@ const serveHTML = `<!DOCTYPE html>
             <h3>Performance and logging</h3>
             <div class="grid">
               <label class="field">
-                Rate per second <span class="flag">--rate</span>
+                Rate per second <span class="flag">--rate</span><span class="tip" title="Lower rates reduce server load.">?</span>
                 <input id="rate" data-flag="--rate" data-default="2" type="text" value="2" />
+                <span class="help">Recommended: 2.</span>
               </label>
               <label class="field">
-                Max workers <span class="flag">--max-workers</span>
+                Max workers <span class="flag">--max-workers</span><span class="tip" title="More workers increase parallel downloads.">?</span>
                 <input id="maxWorkers" data-flag="--max-workers" data-default="10" type="text" value="10" />
+                <span class="help">Recommended: 10.</span>
               </label>
               <label class="field advanced-only" data-advanced="true">
                 Proxy URL <span class="flag">--proxy</span>

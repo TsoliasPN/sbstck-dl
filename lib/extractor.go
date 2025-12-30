@@ -721,8 +721,9 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		h1 { margin: 0; font-size: 20px; letter-spacing: -0.02em; }
 		.meta { color: var(--muted); font-size: 13px; }
 
-		.controls { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; }
-		.controls input[type="search"] {
+		.controls { display: grid; grid-template-columns: 1fr auto auto auto auto auto; gap: 10px; align-items: center; }
+		.controls input[type="search"],
+		.controls input[type="date"] {
 			width: 100%;
 			padding: 10px 12px;
 			border: 1px solid var(--border);
@@ -742,6 +743,10 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		}
 		.controls label { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; user-select: none; }
 		.controls input[type="checkbox"] { transform: translateY(0.5px); }
+		@media (max-width: 860px) {
+			.controls { grid-template-columns: 1fr 1fr; }
+			.controls input[type="search"] { grid-column: 1 / -1; }
+		}
 
 		.layout { display: grid; grid-template-columns: 190px 1fr; gap: 18px; margin-top: 18px; }
 		@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
@@ -842,6 +847,8 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			</div>
 			<div class="controls" role="region" aria-label="Archive controls">
 				<input id="search" type="search" placeholder="Search title or description…" autocomplete="off" />
+				<input id="filterFrom" type="date" aria-label="Filter from date" />
+				<input id="filterTo" type="date" aria-label="Filter to date" />
 				<select id="sort">
 					<option value="newest" selected>Newest</option>
 					<option value="oldest">Oldest</option>
@@ -907,6 +914,8 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		(function () {
 			const root = document.documentElement;
 			const search = document.getElementById('search');
+			const filterFrom = document.getElementById('filterFrom');
+			const filterTo = document.getElementById('filterTo');
 			const sort = document.getElementById('sort');
 			const status = document.getElementById('status');
 			const resultCount = document.getElementById('resultCount');
@@ -945,6 +954,23 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 				return t.includes(query) || d.includes(query);
 			}
 
+			function parseDay(value) {
+				if (!value) return null;
+				const t = Date.parse(value + 'T00:00:00');
+				return Number.isFinite(t) ? t : null;
+			}
+
+			function inDateRange(card) {
+				const from = parseDay(filterFrom.value);
+				const to = parseDay(filterTo.value);
+				if (!from && !to) return true;
+				const t = parseDate(card);
+				if (!t) return false;
+				if (from && t < from) return false;
+				if (to && t > (to + 86399999)) return false;
+				return true;
+			}
+
 			function updateCounts(visibleCount) {
 				status.textContent = 'Showing ' + visibleCount + ' of ' + allCards.length;
 				resultCount.textContent = visibleCount;
@@ -967,7 +993,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 				const q = normalize(search.value).trim();
 				let visible = 0;
 				allCards.forEach(card => {
-					const ok = matches(card, q);
+					const ok = matches(card, q) && inDateRange(card);
 					card.classList.toggle('hidden', !ok);
 					if (ok) visible++;
 				});
@@ -1024,6 +1050,8 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 				if (filterTimer) clearTimeout(filterTimer);
 				filterTimer = setTimeout(applyFilter, 60);
 			});
+			filterFrom.addEventListener('change', applyFilter);
+			filterTo.addEventListener('change', applyFilter);
 			sort.addEventListener('change', applySort);
 			toggleCovers.addEventListener('change', () => setCoversEnabled(toggleCovers.checked));
 			toggleTheme.addEventListener('click', toggleThemeMode);

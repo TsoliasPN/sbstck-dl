@@ -200,6 +200,7 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("concurrency"))
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("log-format"))
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("cookie-val-file"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("cookie-jar"))
 	})
 
 	t.Run("download command flags", func(t *testing.T) {

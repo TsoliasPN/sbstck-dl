@@ -354,13 +354,19 @@ func TestResolveCookieValue(t *testing.T) {
 	path := tempDir + "/cookie.txt"
 	require.NoError(t, os.WriteFile(path, []byte("file-cookie\n"), 0644))
 
-	if got := resolveCookieValue("flag-cookie", path); got != "flag-cookie" {
+	got, err := resolveCookieValue("flag-cookie", path)
+	require.NoError(t, err)
+	if got != "flag-cookie" {
 		t.Fatalf("expected flag to win, got %q", got)
 	}
-	if got := resolveCookieValue("", path); got != "file-cookie" {
+	got, err = resolveCookieValue("", path)
+	require.NoError(t, err)
+	if got != "file-cookie" {
 		t.Fatalf("expected file value, got %q", got)
 	}
-	if got := resolveCookieValue("", ""); got != "env-cookie" {
+	got, err = resolveCookieValue("", "")
+	require.NoError(t, err)
+	if got != "env-cookie" {
 		t.Fatalf("expected env value, got %q", got)
 	}
 }

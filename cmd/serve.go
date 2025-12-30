@@ -7,9 +7,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/alexferrari88/sbstck-dl/lib"
 	"github.com/spf13/cobra"
 )
 
@@ -44,6 +47,7 @@ func serveUIHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", serveUIRoot)
 	mux.HandleFunc("/api/test-connection", serveTestConnection)
+	mux.HandleFunc("/api/preview", servePreview)
 	return mux
 }
 
@@ -75,6 +79,39 @@ type testConnectionResponse struct {
 	PrivateStatus int      `json:"private_status,omitempty"`
 	PrivateOK     bool     `json:"private_ok"`
 	Errors        []string `json:"errors,omitempty"`
+}
+
+type previewRequest struct {
+	PublicationURL string `json:"publication_url"`
+	Output         string `json:"output"`
+	Format         string `json:"format"`
+	Before         string `json:"before"`
+	After          string `json:"after"`
+	Force          bool   `json:"force"`
+	SkipExisting   bool   `json:"skip_existing"`
+	RefreshUpdated bool   `json:"refresh_updated"`
+	Rate           string `json:"rate"`
+	MaxWorkers     string `json:"max_workers"`
+	Proxy          string `json:"proxy"`
+	CookieName     string `json:"cookie_name"`
+	CookieVal      string `json:"cookie_val"`
+	CookieValFile  string `json:"cookie_val_file"`
+	CookieJar      string `json:"cookie_jar"`
+}
+
+type previewResponse struct {
+	OK          bool     `json:"ok"`
+	Total       int      `json:"total"`
+	ToDownload  int      `json:"to_download"`
+	Skipped     int      `json:"skipped"`
+	Refreshed   int      `json:"refreshed,omitempty"`
+	OldestDate  string   `json:"oldest_date,omitempty"`
+	NewestDate  string   `json:"newest_date,omitempty"`
+	Errors      []string `json:"errors,omitempty"`
+	SitemapURL  string   `json:"sitemap_url,omitempty"`
+	OutputDir   string   `json:"output_dir,omitempty"`
+	Format      string   `json:"format,omitempty"`
+	SkipApplied bool     `json:"skip_applied"`
 }
 
 func serveTestConnection(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +202,137 @@ func serveTestConnection(w http.ResponseWriter, r *http.Request) {
 	writeTestResponse(w, response)
 }
 
+func servePreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req previewRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writePreviewResponse(w, previewResponse{
+			OK:     false,
+			Errors: []string{fmt.Sprintf("Invalid request payload: %v", err)},
+		})
+		return
+	}
+
+	errorsList := make([]string, 0)
+	pubURL, err := parseURL(strings.TrimSpace(req.PublicationURL))
+	if err != nil || pubURL == nil {
+		errorsList = append(errorsList, "Substack URL must be a valid http(s) URL.")
+	}
+
+	var proxyURL *url.URL
+	if strings.TrimSpace(req.Proxy) != "" {
+		parsedProxy, err := parseURL(strings.TrimSpace(req.Proxy))
+		if err != nil {
+			errorsList = append(errorsList, "Proxy URL must be a valid http(s) URL.")
+		} else {
+			proxyURL = parsedProxy
+		}
+	}
+
+	format := strings.ToLower(strings.TrimSpace(req.Format))
+	if format == "" {
+		format = "html"
+	}
+
+	outputDir := strings.TrimSpace(req.Output)
+	if outputDir == "" {
+		outputDir = "."
+	}
+
+	domainHint := ""
+	if pubURL != nil {
+		domainHint = pubURL.Hostname()
+	}
+
+	cookie, cookieErrors := resolveTestCookie(testConnectionRequest{
+		CookieName:    req.CookieName,
+		CookieVal:     req.CookieVal,
+		CookieValFile: req.CookieValFile,
+		CookieJar:     req.CookieJar,
+	}, domainHint)
+	errorsList = append(errorsList, cookieErrors...)
+
+	rate := parsePositiveInt(req.Rate, lib.DefaultRatePerSecond)
+	maxWorkers := parsePositiveInt(req.MaxWorkers, lib.DefaultMaxWorkers)
+
+	fetcher := lib.NewFetcher(
+		lib.WithRatePerSecond(rate),
+		lib.WithMaxWorkers(maxWorkers),
+		lib.WithProxyURL(proxyURL),
+		lib.WithCookie(cookie),
+	)
+	extractor := lib.NewExtractor(fetcher)
+
+	response := previewResponse{
+		OutputDir: outputDir,
+		Format:    format,
+	}
+	if pubURL != nil {
+		response.SitemapURL = buildSitemapURL(pubURL)
+	}
+
+	if pubURL == nil {
+		response.Errors = errorsList
+		response.OK = false
+		writePreviewResponse(w, response)
+		return
+	}
+
+	dateFilter := makeDateFilterFunc(strings.TrimSpace(req.Before), strings.TrimSpace(req.After))
+	entries, err := extractor.GetAllPostsEntries(ctx, pubURL.String(), dateFilter)
+	if err != nil {
+		errorsList = append(errorsList, fmt.Sprintf("Failed to fetch sitemap: %v", err))
+		response.Errors = errorsList
+		response.OK = false
+		writePreviewResponse(w, response)
+		return
+	}
+
+	response.Total = len(entries)
+	oldest, newest := summarizeEntryDates(entries)
+	response.OldestDate = oldest
+	response.NewestDate = newest
+
+	skipExistingMode := !req.Force
+	if req.SkipExisting {
+		skipExistingMode = true
+	}
+	response.SkipApplied = skipExistingMode
+
+	if skipExistingMode {
+		manifestPath := filepath.Join(outputDir, lib.ManifestFilename)
+		manifest, err := lib.LoadManifest(manifestPath)
+		if err != nil {
+			errorsList = append(errorsList, fmt.Sprintf("Failed to read manifest: %v", err))
+			manifest = lib.NewManifest()
+		}
+		filtered, skipped, refreshed, err := filterEntriesForDownload(entries, outputDir, format, manifest, req.RefreshUpdated)
+		if err != nil {
+			errorsList = append(errorsList, fmt.Sprintf("Failed to filter existing posts: %v", err))
+		}
+		response.ToDownload = len(filtered)
+		response.Skipped = skipped
+		response.Refreshed = refreshed
+	} else {
+		response.ToDownload = len(entries)
+		response.Skipped = 0
+		response.Refreshed = 0
+	}
+
+	response.Errors = errorsList
+	response.OK = len(errorsList) == 0
+	writePreviewResponse(w, response)
+}
+
+func writePreviewResponse(w http.ResponseWriter, response previewResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
 func writeTestResponse(w http.ResponseWriter, response testConnectionResponse) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
@@ -246,6 +414,41 @@ func fetchStatus(client *http.Client, targetURL string, cookie *http.Cookie) (in
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode, nil
+}
+
+func parsePositiveInt(value string, fallback int) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func summarizeEntryDates(entries []lib.SitemapEntry) (string, string) {
+	var oldest time.Time
+	var newest time.Time
+	for _, entry := range entries {
+		parsed, ok := parseDateInput(entry.LastMod)
+		if !ok {
+			continue
+		}
+		if oldest.IsZero() || parsed.Before(oldest) {
+			oldest = parsed
+		}
+		if newest.IsZero() || parsed.After(newest) {
+			newest = parsed
+		}
+	}
+	if oldest.IsZero() && newest.IsZero() {
+		return "", ""
+	}
+	oldestStr := oldest.Format("2006-01-02")
+	newestStr := newest.Format("2006-01-02")
+	return oldestStr, newestStr
 }
 
 const serveHTML = `<!DOCTYPE html>
@@ -395,6 +598,36 @@ const serveHTML = `<!DOCTYPE html>
     }
     .test-status.ok { color: #166534; }
     .test-status.bad { color: #b91c1c; }
+    .preview-card {
+      margin-top: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px;
+      background: #f8fafc;
+      font-size: 13px;
+      color: var(--muted);
+      display: grid;
+      gap: 6px;
+    }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+    }
+    .preview-tile {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px;
+      color: var(--ink);
+    }
+    .preview-tile span {
+      display: block;
+      font-size: 11px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
     .field.invalid input,
     .field.invalid select,
     .field.invalid textarea {
@@ -807,6 +1040,24 @@ const serveHTML = `<!DOCTYPE html>
             </div>
             <div id="reviewStatus" class="hint">Tip: add a URL to target a single post or a publication.</div>
             <ul id="validationErrors" class="error-list" hidden></ul>
+            <div class="group">
+              <h3>Dry-run preview</h3>
+              <p class="small">See how many posts will be downloaded or skipped before running.</p>
+              <button type="button" id="previewBtn" class="primary">Run preview</button>
+              <div id="previewStatus" class="test-status">No preview run yet.</div>
+              <div id="previewResults" class="preview-card" hidden>
+                <div class="preview-grid">
+                  <div class="preview-tile"><span>Total posts</span><strong id="previewTotal">0</strong></div>
+                  <div class="preview-tile"><span>Will download</span><strong id="previewDownload">0</strong></div>
+                  <div class="preview-tile"><span>Skipped</span><strong id="previewSkipped">0</strong></div>
+                  <div class="preview-tile"><span>Refreshed</span><strong id="previewRefreshed">0</strong></div>
+                </div>
+                <div class="preview-grid">
+                  <div class="preview-tile"><span>Oldest</span><strong id="previewOldest">-</strong></div>
+                  <div class="preview-tile"><span>Newest</span><strong id="previewNewest">-</strong></div>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </form>
@@ -847,6 +1098,15 @@ const serveHTML = `<!DOCTYPE html>
       const beforeDateInput = document.getElementById('beforeDate');
       const testBtn = document.getElementById('testBtn');
       const testStatus = document.getElementById('testStatus');
+      const previewBtn = document.getElementById('previewBtn');
+      const previewStatus = document.getElementById('previewStatus');
+      const previewResults = document.getElementById('previewResults');
+      const previewTotal = document.getElementById('previewTotal');
+      const previewDownload = document.getElementById('previewDownload');
+      const previewSkipped = document.getElementById('previewSkipped');
+      const previewRefreshed = document.getElementById('previewRefreshed');
+      const previewOldest = document.getElementById('previewOldest');
+      const previewNewest = document.getElementById('previewNewest');
       const cookieNameInput = document.getElementById('cookieName');
       const cookieValInput = document.getElementById('cookieVal');
       const cookieValFileInput = document.getElementById('cookieValFile');
@@ -1121,6 +1381,82 @@ const serveHTML = `<!DOCTYPE html>
             testStatus.className = 'test-status bad';
           }).finally(() => {
             testBtn.disabled = false;
+          });
+        });
+      }
+
+      if (previewBtn) {
+        previewBtn.addEventListener('click', function () {
+          const errors = validateAndRender();
+          const urlValue = (urlInput ? urlInput.value : '').trim();
+          if (errors.length) {
+            if (previewStatus) {
+              previewStatus.textContent = 'Fix the highlighted fields before previewing.';
+              previewStatus.className = 'test-status bad';
+            }
+            return;
+          }
+          if (!urlValue) {
+            if (previewStatus) {
+              previewStatus.textContent = 'Add a Substack URL before previewing.';
+              previewStatus.className = 'test-status bad';
+            }
+            return;
+          }
+
+          const payload = {
+            publication_url: urlValue,
+            output: document.getElementById('output') ? document.getElementById('output').value.trim() : '',
+            format: document.getElementById('format') ? document.getElementById('format').value : '',
+            before: beforeDateInput ? beforeDateInput.value.trim() : '',
+            after: afterDateInput ? afterDateInput.value.trim() : '',
+            force: document.getElementById('forceDownload') ? document.getElementById('forceDownload').checked : false,
+            skip_existing: document.getElementById('skipExisting') ? document.getElementById('skipExisting').checked : false,
+            refresh_updated: document.getElementById('refreshUpdated') ? document.getElementById('refreshUpdated').checked : false,
+            rate: document.getElementById('rate') ? document.getElementById('rate').value : '',
+            max_workers: document.getElementById('maxWorkers') ? document.getElementById('maxWorkers').value : '',
+            proxy: (proxyInput && !proxyInput.disabled) ? proxyInput.value.trim() : '',
+            cookie_name: (cookieNameInput && !cookieNameInput.disabled) ? cookieNameInput.value : '',
+            cookie_val: (cookieValInput && !cookieValInput.disabled) ? cookieValInput.value : '',
+            cookie_val_file: (cookieValFileInput && !cookieValFileInput.disabled) ? cookieValFileInput.value : '',
+            cookie_jar: (cookieJarInput && !cookieJarInput.disabled) ? cookieJarInput.value : ''
+          };
+
+          previewBtn.disabled = true;
+          if (previewStatus) {
+            previewStatus.textContent = 'Previewing...';
+            previewStatus.className = 'test-status';
+          }
+          if (previewResults) {
+            previewResults.hidden = true;
+          }
+
+          fetch('/api/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }).then(res => res.json()).then(data => {
+            if (!previewStatus) return;
+            if (data.ok) {
+              previewStatus.textContent = 'Preview ready.';
+              previewStatus.className = 'test-status ok';
+            } else {
+              previewStatus.textContent = (data.errors && data.errors.length) ? data.errors.join(' | ') : 'Preview failed.';
+              previewStatus.className = 'test-status bad';
+            }
+            if (previewTotal) previewTotal.textContent = String(data.total || 0);
+            if (previewDownload) previewDownload.textContent = String(data.to_download || 0);
+            if (previewSkipped) previewSkipped.textContent = String(data.skipped || 0);
+            if (previewRefreshed) previewRefreshed.textContent = String(data.refreshed || 0);
+            if (previewOldest) previewOldest.textContent = data.oldest_date || '-';
+            if (previewNewest) previewNewest.textContent = data.newest_date || '-';
+            if (previewResults) previewResults.hidden = false;
+          }).catch(err => {
+            if (!previewStatus) return;
+            previewStatus.textContent = 'Preview failed: ' + err;
+            previewStatus.className = 'test-status bad';
+          }).finally(() => {
+            previewBtn.disabled = false;
           });
         });
       }

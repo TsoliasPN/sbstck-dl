@@ -219,6 +219,7 @@ Use the `--create-archive` flag to generate an organized index page that links a
 - HTML archive includes search, sorting (newest/oldest/title), and date range filters
 - Extracts Notion links into `notion-links.html` and `notion-links.md` (deduped and grouped by post)
 - Shows Notion link counts per post with a badge linking to the Notion links list
+- Adds a domain index (Notion, GitHub, Docs, etc.) for one-click filtering of posts with outbound links
 - Works with both single post and bulk downloads
 
 **Examples:**
@@ -388,7 +389,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Extract and index Notion links across posts into a separate `notion-links.{html,md}` (deduped + grouped by post)
 - [x] (P2) Add a Notion badge/count in `index.html` for posts containing Notion links, with quick navigation to the links list
 - [x] (P2) Persist extracted links in per-post metadata (sidecar JSON/front matter) to avoid re-parsing content on reruns
-- [ ] (P2) Add an index-by-domain view (Notion, Google Docs, GitHub, etc.) so Notion links become a one-click filter
+- [x] (P2) Add an index-by-domain view (Notion, Google Docs, GitHub, etc.) so Notion links become a one-click filter
 - [x] (P2) Normalize/dedupe extracted Notion URLs (strip tracking params, canonicalize hosts/paths)
 - [ ] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
 

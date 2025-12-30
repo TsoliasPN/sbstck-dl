@@ -319,7 +319,24 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 - [ ] (P2) Normalize/dedupe extracted Notion URLs (strip tracking params, canonicalize hosts/paths)
 - [ ] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
 
-#### P2 — Config, CLI & docs
+#### P2 - UI (guided local web app)
+- [ ] (P2) Add a `serve` (or `ui`) command that launches a local-only web UI (bind `127.0.0.1`) for guided runs
+- [ ] (P2) Build a step-by-step “wizard” flow with presets (Basic vs Advanced) that maps 1:1 to CLI flags
+- [ ] (P2) Add inline help/tooltips and recommended defaults (format, images/files, rate limits) for non-technical users
+- [ ] (P2) Validate inputs in the UI (URL/proxy/date formats) and provide actionable error messages
+- [ ] (P2) Add a “Test connection” step (fetch `sitemap.xml`, verify cookie works for a known private post)
+- [ ] (P2) Add a dry-run preview screen: posts count, newest/oldest dates, and what will be downloaded/skipped
+- [ ] (P2) Run downloads as background jobs with live progress (per post), logs, retry stats, and a Cancel button
+- [ ] (P2) Add a “Rerun later”/incremental sync view (show last run, new posts since last run, run again)
+- [ ] (P2) Add profile management: save/load run presets and export/import a config file from the UI
+- [ ] (P2) Improve secret handling in UI: don’t persist cookies by default; optional secure storage (OS keychain/credential manager)
+- [ ] (P2) Add `--open` to auto-open the browser when starting the UI, and print the URL for manual open
+- [ ] (P2) Bundle UI assets into the binary (Go `embed`) so the UI ships as a single executable
+- [ ] (P2) Expose a small local API (`/api/...`) for list/download/status, with basic hardening (CSRF token, no remote bind)
+- [ ] (P2) Refactor core download logic into a reusable “runner” API so both CLI and UI share the same codepath
+- [ ] (P2) Add API-level tests (`httptest`) for the UI backend and keep `go test ./...` green
+
+#### P2 - Config, CLI & docs
 - [ ] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
 - [ ] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
 - [ ] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)

@@ -337,6 +337,17 @@ You can also read the cookie value from a file using `--cookie-val-file`.
 You can also provide a Netscape cookie jar (`cookies.txt`) using `--cookie-jar`.
 You can also read the cookie value from your OS keychain using `--cookie-keychain`.
 
+Steps to get the cookie value:
+1) Log in to the private Substack in your browser.
+2) Open developer tools and go to the Application/Storage tab.
+3) Select Cookies for the Substack domain and copy the value for `substack.sid` or `connect.sid`.
+4) Paste the cookie value into `--cookie_val`, or store it in a file/keychain and reference it with `--cookie-val-file` or `--cookie-keychain`.
+
+Security notes:
+- Treat the cookie like a password and keep it out of chat logs, screenshots, and shared terminals.
+- Prefer `SBSTCK_COOKIE_VAL`, `--cookie-val-file`, or `--cookie-keychain` to avoid shell history.
+- Rotate the cookie by logging out and back in if you suspect it was exposed.
+
 #### Example
 
 ```bash
@@ -485,7 +496,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 
 #### P2 - Config, CLI & docs
 - [x] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
-- [ ] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
+- [x] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
 - [ ] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)
 - [ ] (P2) Add `list --json` output; optionally add a metadata mode that also fetches title/date (rate-limited)
 

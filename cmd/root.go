@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/alexferrari88/sbstck-dl/lib"
@@ -18,8 +19,9 @@ import (
 type cookieName string
 
 const (
-	substackSid cookieName = "substack.sid"
-	connectSid  cookieName = "connect.sid"
+	substackSid     cookieName = "substack.sid"
+	connectSid      cookieName = "connect.sid"
+	cookieValEnvVar            = "SBSTCK_COOKIE_VAL"
 )
 
 func (c *cookieName) String() string {
@@ -50,6 +52,7 @@ var (
 	afterDate      string
 	idCookieName   cookieName
 	idCookieVal    string
+	cookieValFile  string
 	ctx            = context.Background()
 	parsedProxyURL *url.URL
 	fetcher        *lib.Fetcher
@@ -80,6 +83,14 @@ var (
 			logFormat = normalizeLogFormat(logFormat)
 			if logFormat != logFormatText && logFormat != logFormatJSON {
 				log.Fatal("log-format must be either \"text\" or \"json\"")
+			}
+
+			idCookieVal = resolveCookieValue(idCookieVal, cookieValFile)
+			if idCookieName != "" && idCookieVal == "" {
+				log.Fatalf("cookie_val is required when cookie_name is set (or set %s or --cookie-val-file)", cookieValEnvVar)
+			}
+			if idCookieName == "" && idCookieVal != "" {
+				log.Fatal("cookie_name is required when cookie_val is set")
 			}
 
 			if idCookieVal != "" && idCookieName != "" {
@@ -119,7 +130,8 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&proxyURL, "proxy", "x", "", "Specify the proxy url")
 	rootCmd.PersistentFlags().Var(&idCookieName, "cookie_name", "Either \"substack.sid\" or \"connect.sid\", based on the cookie you have (required for private newsletters)")
-	rootCmd.PersistentFlags().StringVar(&idCookieVal, "cookie_val", "", "The substack.sid/connect.sid cookie value (required for private newsletters)")
+	rootCmd.PersistentFlags().StringVar(&idCookieVal, "cookie_val", "", "The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)")
+	rootCmd.PersistentFlags().StringVar(&cookieValFile, "cookie-val-file", "", "Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.PersistentFlags().IntVarP(&ratePerSecond, "rate", "r", lib.DefaultRatePerSecond, "Specify the rate of requests per second")
 	rootCmd.PersistentFlags().StringVar(&beforeDate, "before", "", "Download posts published before this date (format: YYYY-MM-DD)")
@@ -127,7 +139,6 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&maxWorkers, "max-workers", lib.DefaultMaxWorkers, "Maximum parallel workers for downloading posts (rate limiting still applies)")
 	rootCmd.PersistentFlags().IntVar(&maxWorkers, "concurrency", lib.DefaultMaxWorkers, "Alias for --max-workers")
 	rootCmd.PersistentFlags().StringVar(&logFormat, "log-format", logFormatText, "Log format (text or json)")
-	rootCmd.MarkFlagsRequiredTogether("cookie_name", "cookie_val")
 
 	rootCmd.AddCommand(downloadCmd)
 	rootCmd.AddCommand(listCmd)
@@ -180,4 +191,18 @@ func parseDateInput(value string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+func resolveCookieValue(flagValue string, filePath string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if filePath != "" {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			log.Fatalf("failed to read cookie value file: %v", err)
+		}
+		return strings.TrimSpace(string(data))
+	}
+	return os.Getenv(cookieValEnvVar)
 }

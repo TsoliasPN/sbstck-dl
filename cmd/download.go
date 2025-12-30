@@ -326,6 +326,14 @@ func filterExistingPosts(urls []string, outputFolder string, format string) ([]s
 		manifest = nil
 	}
 
+	slugIndex, err := indexExistingSlugs(outputFolder, format)
+	if err != nil {
+		if firstErr == nil {
+			firstErr = err
+		}
+		slugIndex = map[string]struct{}{}
+	}
+
 	var filtered []string
 	for _, url := range urls {
 		if manifest != nil {
@@ -345,18 +353,61 @@ func filterExistingPosts(urls []string, outputFolder string, format string) ([]s
 		}
 
 		slug := extractSlug(url)
-		path := fmt.Sprintf("%s/%s_%s.%s", outputFolder, "*", slug, format)
-		matches, globErr := filepath.Glob(path)
-		if globErr != nil {
-			if firstErr == nil {
-				firstErr = globErr
-			}
-			filtered = append(filtered, url)
-			continue
-		}
-		if len(matches) == 0 {
+		if _, exists := slugIndex[slug]; !exists {
 			filtered = append(filtered, url)
 		}
 	}
 	return filtered, firstErr
+}
+
+func indexExistingSlugs(outputFolder string, format string) (map[string]struct{}, error) {
+	entries, err := os.ReadDir(outputFolder)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]struct{}{}, nil
+		}
+		return nil, err
+	}
+
+	slugIndex := make(map[string]struct{})
+	ext := "." + format
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ext) {
+			continue
+		}
+		base := strings.TrimSuffix(name, ext)
+		slug := slugFromFilename(base)
+		if slug == "" {
+			continue
+		}
+		slugIndex[slug] = struct{}{}
+	}
+
+	return slugIndex, nil
+}
+
+func slugFromFilename(base string) string {
+	if strings.HasPrefix(base, "_") {
+		if len(base) > 1 {
+			return base[1:]
+		}
+		return ""
+	}
+	if len(base) > 16 && base[8] == '_' && base[15] == '_' && isDigits(base[:8]) && isDigits(base[9:15]) {
+		return base[16:]
+	}
+	return ""
+}
+
+func isDigits(value string) bool {
+	for i := 0; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return false
+		}
+	}
+	return value != ""
 }

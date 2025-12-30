@@ -41,6 +41,7 @@ Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
   -h, --help                     help for sbstck-dl
       --concurrency int          Alias for --max-workers
       --log-format string        Log format (text or json) (default "text")
@@ -99,6 +100,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -220,6 +222,7 @@ Use the `--create-archive` flag to generate an organized index page that links a
 - Extracts Notion links into `notion-links.html` and `notion-links.md` (deduped and grouped by post)
 - Shows Notion link counts per post with a badge linking to the Notion links list
 - Adds a domain index (Notion, GitHub, Docs, etc.) for one-click filtering of posts with outbound links
+- Supports optional Notion label maps to show friendly names for links
 - Works with both single post and bulk downloads
 
 **Examples:**
@@ -239,6 +242,25 @@ sbstck-dl download --url https://example.substack.com --download-images --downlo
 
 # Custom directory structure with archive
 sbstck-dl download --url https://example.substack.com --create-archive --images-dir assets --files-dir attachments
+```
+
+#### Notion label map
+
+Use `--notion-labels` to provide a JSON or YAML map of Notion URLs to friendly labels for `notion-links.html` and `notion-links.md`.
+URLs are normalized (tracking params removed) before matching.
+
+JSON:
+```json
+{
+  "https://www.notion.so/Workspace/Page-123?utm_source=x": "Project Plan",
+  "https://example.notion.site/Team-Wiki": "Team Wiki"
+}
+```
+
+YAML:
+```yaml
+https://www.notion.so/Workspace/Page-123?utm_source=x: Project Plan
+https://example.notion.site/Team-Wiki: Team Wiki
 ```
 
 **Archive Content Per Post:**
@@ -289,6 +311,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -331,6 +354,7 @@ Global Flags:
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
       --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --notion-labels string     Path to a YAML/JSON map of Notion URL to label for notion-links output
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -391,7 +415,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P2) Persist extracted links in per-post metadata (sidecar JSON/front matter) to avoid re-parsing content on reruns
 - [x] (P2) Add an index-by-domain view (Notion, Google Docs, GitHub, etc.) so Notion links become a one-click filter
 - [x] (P2) Normalize/dedupe extracted Notion URLs (strip tracking params, canonicalize hosts/paths)
-- [ ] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
+- [x] (P2) Support a user-provided label map (YAML/JSON) to display friendly names for frequently referenced Notion pages
 
 #### P2 - UI (guided local web app)
 - [ ] (P2) Add a `serve` (or `ui`) command that launches a local-only web UI (bind `127.0.0.1`) for guided runs

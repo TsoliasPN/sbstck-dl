@@ -25,14 +25,18 @@ type notionPostLinks struct {
 }
 
 func generateNotionIndex(outputFolder string, format string) error {
+	labelMap, err := loadNotionLabelMap(notionLabelsPath)
+	if err != nil {
+		return err
+	}
 	posts, err := buildNotionIndex(outputFolder, format)
 	if err != nil && logFormat != logFormatJSON {
 		log.Printf("Warning: %v\n", err)
 	}
-	if err := writeNotionIndexHTML(outputFolder, posts); err != nil {
+	if err := writeNotionIndexHTML(outputFolder, posts, labelMap); err != nil {
 		return err
 	}
-	if err := writeNotionIndexMarkdown(outputFolder, posts); err != nil {
+	if err := writeNotionIndexMarkdown(outputFolder, posts, labelMap); err != nil {
 		return err
 	}
 	return nil
@@ -104,7 +108,7 @@ func normalizeNotionURL(raw string) (string, bool) {
 	return lib.NormalizeNotionURL(raw)
 }
 
-func writeNotionIndexHTML(outputFolder string, posts []notionPostLinks) error {
+func writeNotionIndexHTML(outputFolder string, posts []notionPostLinks, labels map[string]string) error {
 	var buf bytes.Buffer
 	buf.WriteString("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n")
 	buf.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
@@ -114,6 +118,7 @@ func writeNotionIndexHTML(outputFolder string, posts []notionPostLinks) error {
 	buf.WriteString("h1{margin-top:0} .post{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px}")
 	buf.WriteString(".post h2{margin:0 0 8px;font-size:18px} .post ul{margin:0;padding-left:18px}")
 	buf.WriteString(".meta{color:#6b7280;font-size:13px;margin-bottom:12px}")
+	buf.WriteString(".link-url{color:#6b7280;font-size:12px;margin-left:6px;word-break:break-all}")
 	buf.WriteString("</style>\n</head>\n<body>\n<div class=\"container\">\n")
 	buf.WriteString("<h1>Notion Links</h1>\n")
 	buf.WriteString(fmt.Sprintf("<div class=\"meta\">Generated %s</div>\n", time.Now().Format("January 2, 2006 15:04")))
@@ -126,7 +131,11 @@ func writeNotionIndexHTML(outputFolder string, posts []notionPostLinks) error {
 			buf.WriteString(fmt.Sprintf("<h2><a href=\"%s\">%s</a></h2>\n", post.RelPath, htmlEscape(post.Title)))
 			buf.WriteString("<ul>\n")
 			for _, link := range post.Links {
-				buf.WriteString(fmt.Sprintf("<li><a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">%s</a></li>\n", link, link))
+				if label := notionLabelForLink(link, labels); label != "" {
+					buf.WriteString(fmt.Sprintf("<li><a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">%s</a><span class=\"link-url\">%s</span></li>\n", link, htmlEscape(label), link))
+				} else {
+					buf.WriteString(fmt.Sprintf("<li><a href=\"%s\" target=\"_blank\" rel=\"noreferrer\">%s</a></li>\n", link, link))
+				}
 			}
 			buf.WriteString("</ul>\n</div>\n")
 		}
@@ -140,7 +149,7 @@ func writeNotionIndexHTML(outputFolder string, posts []notionPostLinks) error {
 	return nil
 }
 
-func writeNotionIndexMarkdown(outputFolder string, posts []notionPostLinks) error {
+func writeNotionIndexMarkdown(outputFolder string, posts []notionPostLinks, labels map[string]string) error {
 	var buf bytes.Buffer
 	buf.WriteString("# Notion Links\n\n")
 	buf.WriteString(fmt.Sprintf("_Generated %s_\n\n", time.Now().Format("January 2, 2006 15:04")))
@@ -150,13 +159,24 @@ func writeNotionIndexMarkdown(outputFolder string, posts []notionPostLinks) erro
 		for _, post := range posts {
 			buf.WriteString(fmt.Sprintf("## [%s](%s)\n\n", post.Title, post.RelPath))
 			for _, link := range post.Links {
-				buf.WriteString(fmt.Sprintf("- %s\n", link))
+				if label := notionLabelForLink(link, labels); label != "" {
+					buf.WriteString(fmt.Sprintf("- [%s](%s)\n", label, link))
+				} else {
+					buf.WriteString(fmt.Sprintf("- %s\n", link))
+				}
 			}
 			buf.WriteString("\n")
 		}
 	}
 	path := filepath.Join(outputFolder, notionLinksMD)
 	return os.WriteFile(path, buf.Bytes(), 0644)
+}
+
+func notionLabelForLink(link string, labels map[string]string) string {
+	if labels == nil {
+		return ""
+	}
+	return labels[link]
 }
 
 func htmlEscape(value string) string {

@@ -1369,6 +1369,48 @@ func TestArchiveHTMLNotionBadges(t *testing.T) {
 	assert.NotContains(t, string(htmlContent), "Notion 0")
 }
 
+func TestArchiveHTMLDomainIndex(t *testing.T) {
+	tempDir := t.TempDir()
+
+	postWithLinks := createSamplePost()
+	postWithLinks.PostDate = "2023-01-01T10:30:00Z"
+	postWithLinks.Title = "Multi Link Post"
+
+	postWithDocs := createSamplePost()
+	postWithDocs.PostDate = "2023-01-02T10:30:00Z"
+	postWithDocs.Title = "Docs Post"
+
+	withLinksPath := filepath.Join(tempDir, "post-with-links.html")
+	withDocsPath := filepath.Join(tempDir, "post-with-docs.html")
+
+	withLinksContent := `<html><body>
+<a href="https://github.com/org/repo">GitHub</a>
+<a href="https://www.notion.so/Workspace/Page-123">Notion</a>
+</body></html>`
+	withDocsContent := `<html><body>
+<a href="https://docs.google.com/spreadsheets/d/abc">Docs</a>
+</body></html>`
+
+	require.NoError(t, os.WriteFile(withLinksPath, []byte(withLinksContent), 0644))
+	require.NoError(t, os.WriteFile(withDocsPath, []byte(withDocsContent), 0644))
+
+	archive := NewArchive()
+	archive.AddEntry(postWithLinks, withLinksPath, time.Now())
+	archive.AddEntry(postWithDocs, withDocsPath, time.Now())
+
+	require.NoError(t, archive.GenerateHTML(tempDir))
+
+	indexPath := filepath.Join(tempDir, "index.html")
+	htmlContent, err := os.ReadFile(indexPath)
+	require.NoError(t, err)
+
+	content := string(htmlContent)
+	assert.Contains(t, content, `data-domain-filter="github.com"`)
+	assert.Contains(t, content, `data-domain-filter="docs.google.com"`)
+	assert.Contains(t, content, `data-domains="github.com,notion.so"`)
+	assert.Contains(t, content, "All links")
+}
+
 // Benchmarks
 func BenchmarkExtractor(b *testing.B) {
 	// Create test server

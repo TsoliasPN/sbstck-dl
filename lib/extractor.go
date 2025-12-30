@@ -568,6 +568,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		WordCount        int
 		EstimatedReadMin int
 		NotionCount      int
+		Domains          string
 	}
 
 	type archiveYearGroup struct {
@@ -575,21 +576,29 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		Entries []archiveHTMLEntry
 	}
 
+	type archiveDomainGroup struct {
+		Domain string
+		Count  int
+	}
+
 	type archiveHTMLPage struct {
-		GeneratedAt string
-		TotalPosts  int
-		YearGroups  []archiveYearGroup
+		GeneratedAt  string
+		TotalPosts   int
+		YearGroups   []archiveYearGroup
+		DomainGroups []archiveDomainGroup
 	}
 
 	generatedAt := time.Now().Format("January 2, 2006 15:04")
 	page := archiveHTMLPage{
-		GeneratedAt: generatedAt,
-		TotalPosts:  len(a.Entries),
-		YearGroups:  make([]archiveYearGroup, 0),
+		GeneratedAt:  generatedAt,
+		TotalPosts:   len(a.Entries),
+		YearGroups:   make([]archiveYearGroup, 0),
+		DomainGroups: make([]archiveDomainGroup, 0),
 	}
 
 	yearGroupIndex := make(map[string]int)
 	yearOrder := make([]string, 0)
+	domainCounts := make(map[string]int)
 
 	for _, entry := range a.Entries {
 		relPath, _ := filepath.Rel(outputDir, entry.FilePath)
@@ -611,15 +620,25 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			description = entry.Post.Description
 		}
 
+		format := strings.TrimPrefix(strings.ToLower(filepath.Ext(entry.FilePath)), ".")
+		if format == "" {
+			format = "html"
+		}
+
 		notionCount := 0
 		if links, ok := readNotionLinksSidecar(entry.FilePath); ok {
 			notionCount = len(links)
-		} else if content, err := os.ReadFile(entry.FilePath); err == nil {
-			format := strings.TrimPrefix(strings.ToLower(filepath.Ext(entry.FilePath)), ".")
-			if format == "" {
-				format = "html"
+		}
+
+		domains := make([]string, 0)
+		if content, err := os.ReadFile(entry.FilePath); err == nil {
+			domains = ExtractLinkDomains(string(content), format)
+			if notionCount == 0 {
+				notionCount = len(ExtractNotionLinks(string(content), format))
 			}
-			notionCount = len(ExtractNotionLinks(string(content), format))
+		}
+		for _, domain := range domains {
+			domainCounts[domain]++
 		}
 
 		estimatedReadMin := 0
@@ -643,6 +662,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			WordCount:        entry.Post.WordCount,
 			EstimatedReadMin: estimatedReadMin,
 			NotionCount:      notionCount,
+			Domains:          strings.Join(domains, ","),
 		}
 
 		idx, ok := yearGroupIndex[year]
@@ -654,6 +674,19 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		}
 		page.YearGroups[idx].Entries = append(page.YearGroups[idx].Entries, htmlEntry)
 	}
+
+	for domain, count := range domainCounts {
+		page.DomainGroups = append(page.DomainGroups, archiveDomainGroup{
+			Domain: domain,
+			Count:  count,
+		})
+	}
+	sort.Slice(page.DomainGroups, func(i, j int) bool {
+		if page.DomainGroups[i].Count != page.DomainGroups[j].Count {
+			return page.DomainGroups[i].Count > page.DomainGroups[j].Count
+		}
+		return page.DomainGroups[i].Domain < page.DomainGroups[j].Domain
+	})
 
 	// Keep "Unknown" last when it exists; otherwise preserve the archive's publication-date order.
 	if len(page.YearGroups) > 1 {
@@ -789,6 +822,8 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 		}
 		.year-nav a:hover { background: var(--accent-weak); }
 		.year-nav .count { color: var(--muted); font-variant-numeric: tabular-nums; }
+		.year-nav .divider { height: 1px; background: var(--border); margin: 10px 6px; }
+		.year-nav .domain-link.active { background: var(--accent-weak); font-weight: 600; }
 		@media (max-width: 860px) { .year-nav { position: static; } }
 
 		main { min-width: 0; }
@@ -883,13 +918,24 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 	</header>
 
 	<div class="container layout">
-		<nav class="year-nav" aria-label="Years">
+		<nav class="year-nav" aria-label="Archive navigation">
 			<h2>Years</h2>
 			{{range .YearGroups}}
 				<a href="#year-{{.Year}}" data-year-link="{{.Year}}">
 					<span>{{.Year}}</span>
 					<span class="count" data-year-count="{{.Year}}">{{len .Entries}}</span>
 				</a>
+			{{end}}
+			{{if .DomainGroups}}
+				<div class="divider" role="presentation"></div>
+				<h2>Domains</h2>
+				<a href="#" class="domain-link active" data-domain-filter="">All links</a>
+				{{range .DomainGroups}}
+					<a href="#" class="domain-link" data-domain-filter="{{.Domain}}">
+						<span>{{.Domain}}</span>
+						<span class="count">{{.Count}}</span>
+					</a>
+				{{end}}
 			{{end}}
 		</nav>
 
@@ -902,7 +948,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 					</div>
 					<div class="grid" data-year-grid="{{.Year}}">
 						{{range .Entries}}
-							<article class="post-card" data-title="{{.Title}}" data-desc="{{.Description}}" data-pubdate="{{.PubDateISO}}">
+							<article class="post-card" data-title="{{.Title}}" data-desc="{{.Description}}" data-pubdate="{{.PubDateISO}}" data-domains="{{.Domains}}">
 								<div class="cover-wrap">
 									{{if .CoverImage}}<img class="cover" src="{{.CoverImage}}" alt="" loading="lazy" />{{else}}<img class="cover" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="" />{{end}}
 								</div>
@@ -940,6 +986,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			const resultCount = document.getElementById('resultCount');
 			const toggleCovers = document.getElementById('toggleCovers');
 			const toggleTheme = document.getElementById('toggleTheme');
+			const domainLinks = Array.from(document.querySelectorAll('[data-domain-filter]'));
 
 			const yearSections = Array.from(document.querySelectorAll('.year-section'));
 			const allCards = Array.from(document.querySelectorAll('.post-card'));
@@ -971,6 +1018,13 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 				const t = normalize(card.getAttribute('data-title'));
 				const d = normalize(card.getAttribute('data-desc'));
 				return t.includes(query) || d.includes(query);
+			}
+
+			let activeDomain = '';
+			function matchesDomain(card) {
+				if (!activeDomain) return true;
+				const domains = (card.getAttribute('data-domains') || '').split(',').map(s => s.trim()).filter(Boolean);
+				return domains.includes(activeDomain);
 			}
 
 			function parseDay(value) {
@@ -1012,7 +1066,7 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 				const q = normalize(search.value).trim();
 				let visible = 0;
 				allCards.forEach(card => {
-					const ok = matches(card, q) && inDateRange(card);
+					const ok = matches(card, q) && inDateRange(card) && matchesDomain(card);
 					card.classList.toggle('hidden', !ok);
 					if (ok) visible++;
 				});
@@ -1074,6 +1128,18 @@ func (a *Archive) GenerateHTML(outputDir string) error {
 			sort.addEventListener('change', applySort);
 			toggleCovers.addEventListener('change', () => setCoversEnabled(toggleCovers.checked));
 			toggleTheme.addEventListener('click', toggleThemeMode);
+			domainLinks.forEach(link => {
+				link.addEventListener('click', function (event) {
+					event.preventDefault();
+					const domain = link.getAttribute('data-domain-filter') || '';
+					activeDomain = domain;
+					domainLinks.forEach(item => {
+						const itemDomain = item.getAttribute('data-domain-filter') || '';
+						item.classList.toggle('active', itemDomain === activeDomain);
+					});
+					applyFilter();
+				});
+			});
 
 			// Restore preferences
 			const savedTheme = localStorage.getItem('sbstck.theme');

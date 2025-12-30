@@ -39,6 +39,7 @@ Flags:
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
+      --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
   -h, --help                     help for sbstck-dl
       --concurrency int          Alias for --max-workers
       --log-format string        Log format (text or json) (default "text")
@@ -92,6 +93,7 @@ Global Flags:
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
+      --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -277,6 +279,7 @@ Global Flags:
       --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
       --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
       --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
+      --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
       --concurrency int  Alias for --max-workers
       --log-format string  Log format (text or json) (default "text")
       --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
@@ -293,6 +296,7 @@ To get the cookie value you can use the developer tools of your browser.
 Once you have the cookie name and value, you can pass them to the downloader using the `--cookie_name` and `--cookie_val` flags.
 To avoid storing secrets in shell history, you can also set `SBSTCK_COOKIE_VAL` and omit `--cookie_val`.
 You can also read the cookie value from a file using `--cookie-val-file`.
+You can also provide a Netscape cookie jar (`cookies.txt`) using `--cookie-jar`.
 
 #### Example
 
@@ -306,6 +310,10 @@ SBSTCK_COOKIE_VAL=COOKIE_VALUE sbstck-dl download --url https://example.substack
 
 ```bash
 sbstck-dl download --url https://example.substack.com --cookie_name substack.sid --cookie-val-file path/to/cookie.txt
+```
+
+```bash
+sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cookies.txt
 ```
 
 ## Thanks
@@ -336,7 +344,7 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 #### P1 — Private newsletters (auth + safety)
 - [x] (P1) Support reading cookie value from an env var (avoid shell history)
 - [x] (P1) Support reading cookie value from a file (e.g. `--cookie-val-file`)
-- [ ] (P1) Support importing cookies from a Netscape cookie jar (optional)
+- [x] (P1) Support importing cookies from a Netscape cookie jar (optional)
 
 #### P2 - Output & archive UX
 - [ ] (P2) Add `--layout` for output structure (e.g. `flat` (current), `year/month`, `year/slug`)

@@ -28,6 +28,7 @@ Usage:
   sbstck-dl [command]
 
 Available Commands:
+  archive     Regenerate the archive index from existing downloads
   download    Download individual posts or the entire public archive
   help        Help about any command
   list        List the posts of a Substack
@@ -308,6 +309,32 @@ You can also provide a Netscape cookie jar (`cookies.txt`) using `--cookie-jar`.
 sbstck-dl download --url https://example.substack.com --cookie_name substack.sid --cookie_val COOKIE_VALUE
 ```
 
+### Regenerating the archive index
+
+```bash
+Usage:
+  sbstck-dl archive [flags]
+
+Flags:
+  -f, --format string   Specify the output format (options: "html", "md", "txt" (default "html")
+  -h, --help            help for archive
+  -o, --output string   Specify the download directory (default ".")
+
+Global Flags:
+      --after string    Download posts published after this date (format: YYYY-MM-DD)
+      --before string   Download posts published before this date (format: YYYY-MM-DD)
+      --cookie_name cookieName   Either substack.sid or connect.sid, based on your cookie (required for private newsletters)
+      --cookie_val string        The substack.sid/connect.sid cookie value (required for private newsletters; or set SBSTCK_COOKIE_VAL)
+      --cookie-val-file string   Read cookie value from a file (overrides SBSTCK_COOKIE_VAL)
+      --cookie-jar string        Read cookies from a Netscape cookie jar file (cookies.txt)
+      --concurrency int  Alias for --max-workers
+      --log-format string  Log format (text or json) (default "text")
+      --max-workers int  Maximum parallel workers for downloading posts (rate limiting still applies) (default 10)
+  -x, --proxy string    Specify the proxy url
+  -r, --rate int        Specify the rate of requests per second (default 2)
+  -v, --verbose         Enable verbose output
+```
+
 ```bash
 SBSTCK_COOKIE_VAL=COOKIE_VALUE sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 ```
@@ -353,7 +380,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 #### P2 - Output & archive UX
 - [x] (P2) Add `--layout` for output structure (e.g. `flat` (current), `year/month`, `year/slug`)
 - [x] (P2) Optionally write per-post metadata sidecar (e.g. `post.json`) or Markdown front matter
-- [ ] (P2) Add an `archive` command to regenerate `index.{format}` from existing downloads (no re-download)
+- [x] (P2) Add an `archive` command to regenerate `index.{format}` from existing downloads (no re-download)
 - [ ] (P2) Add optional filtering/sorting options for the archive page (e.g. by date range, newest/oldest)
 - [ ] (P2) Extract and index Notion links across posts into a separate `notion-links.{html,md}` (deduped + grouped by post)
 - [ ] (P2) Add a Notion badge/count in `index.html` for posts containing Notion links, with quick navigation to the links list

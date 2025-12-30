@@ -233,6 +233,13 @@ func TestCommandFlags(t *testing.T) {
 		assert.Equal(t, "false", createArchiveFlag.DefValue)
 	})
 
+	t.Run("archive command flags", func(t *testing.T) {
+		cmd := archiveCmd
+
+		assert.NotNil(t, cmd.Flags().Lookup("output"))
+		assert.NotNil(t, cmd.Flags().Lookup("format"))
+	})
+
 	t.Run("list command flags", func(t *testing.T) {
 		cmd := listCmd
 

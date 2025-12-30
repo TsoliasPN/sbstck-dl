@@ -28,6 +28,9 @@ var (
 	fileExtensions string
 	filesDir       string
 	createArchive  bool
+	forceDownload  bool
+	skipExisting   bool
+	refreshUpdated bool
 	failFast       bool
 	continueOnErr  bool
 	failedURLsFile = "failed-urls.txt"
@@ -42,6 +45,10 @@ var (
 				mode = "single"
 			}
 			summary := downloadSummary{Mode: mode}
+			skipExistingMode := !forceDownload
+			if skipExisting {
+				skipExistingMode = true
+			}
 			failedURLs := make([]string, 0)
 			failedURLSet := make(map[string]struct{})
 			failFastMode := failFast
@@ -119,7 +126,7 @@ var (
 				manifest = lib.NewManifest()
 			}
 
-			updateManifest := func(post lib.Post, path string, downloadedAt time.Time) {
+			updateManifest := func(post lib.Post, path string, downloadedAt time.Time, lastModified string) {
 				if manifest == nil {
 					return
 				}
@@ -137,7 +144,7 @@ var (
 					}
 					return
 				}
-				if err := manifest.UpdateEntry(canonicalURL, path, outputFolder, format, downloadedAt); err != nil {
+				if err := manifest.UpdateEntry(canonicalURL, path, outputFolder, format, downloadedAt, lastModified); err != nil {
 					if logFormat == logFormatJSON {
 						logEvent("manifest.update_failed", map[string]any{
 							"url":   canonicalURL,
@@ -238,7 +245,7 @@ var (
 						"url":  post.CanonicalUrl,
 						"path": path,
 					})
-					updateManifest(post, path, time.Now())
+					updateManifest(post, path, time.Now(), "")
 				} else {
 					summary.Failed = 1
 					if post.CanonicalUrl != "" {
@@ -268,8 +275,8 @@ var (
 			} else {
 				// we are downloading the entire archive
 				dateFilterfunc := makeDateFilterFunc(beforeDate, afterDate)
-				urls, err := extractor.GetAllPostsURLs(ctx, downloadUrl, dateFilterfunc)
-				urlsCount := len(urls)
+				entries, err := extractor.GetAllPostsEntries(ctx, downloadUrl, dateFilterfunc)
+				urlsCount := len(entries)
 				if err != nil {
 					summary.Failed = 1
 					logEvent("download.failed", map[string]any{
@@ -300,26 +307,36 @@ var (
 					fmt.Println("Dry run, exiting...")
 					return
 				}
-				urls, err = filterExistingPosts(urls, outputFolder, format)
-				if err != nil {
-					if verbose {
-						fmt.Println("Error filtering existing posts:", err)
+				if skipExistingMode {
+					var skippedExisting int
+					var refreshed int
+					entries, skippedExisting, refreshed, err = filterEntriesForDownload(entries, outputFolder, format, manifest, refreshUpdated)
+					if err != nil {
+						if verbose {
+							fmt.Println("Error filtering existing posts:", err)
+						}
+					}
+					if skippedExisting > 0 {
+						summary.Skipped += skippedExisting
+						logEvent("download.skipped_existing", map[string]any{
+							"count": skippedExisting,
+						})
+					}
+					if refreshed > 0 {
+						logEvent("download.refresh", map[string]any{
+							"count": refreshed,
+						})
 					}
 				}
-				skippedExisting := urlsCount - len(urls)
-				if skippedExisting > 0 {
-					summary.Skipped += skippedExisting
-					logEvent("download.skipped_existing", map[string]any{
-						"count": skippedExisting,
-					})
-				}
-				if len(urls) == 0 {
+				if len(entries) == 0 {
 					if verbose {
 						fmt.Println("No new posts found, exiting...")
 					}
 					finalize()
 					return
 				}
+				urls := entriesToURLs(entries)
+				lastModByURL := entriesToLastMod(entries)
 				bar := progressbar.NewOptions(len(urls),
 					progressbar.OptionSetWidth(25),
 					progressbar.OptionSetDescription("downloading"),
@@ -389,7 +406,7 @@ var (
 							"url":  post.CanonicalUrl,
 							"path": path,
 						})
-						updateManifest(post, path, time.Now())
+						updateManifest(post, path, time.Now(), lastModByURL[result.Url])
 					} else {
 						summary.Failed++
 						if post.CanonicalUrl != "" {
@@ -467,8 +484,12 @@ func init() {
 	downloadCmd.Flags().StringVar(&fileExtensions, "file-extensions", "", "Comma-separated list of file extensions to download (e.g., 'pdf,docx,txt'). If empty, downloads all file types")
 	downloadCmd.Flags().StringVar(&filesDir, "files-dir", "files", "Directory name for downloaded file attachments")
 	downloadCmd.Flags().BoolVar(&createArchive, "create-archive", false, "Create an archive index page linking all downloaded posts")
+	downloadCmd.Flags().BoolVar(&forceDownload, "force", false, "Redownload posts even if they already exist")
+	downloadCmd.Flags().BoolVar(&skipExisting, "skip-existing", false, "Skip existing posts (default for archive downloads)")
+	downloadCmd.Flags().BoolVar(&refreshUpdated, "refresh-updated", false, "Refresh posts when sitemap lastmod is newer than the manifest")
 	downloadCmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop the download on the first error")
 	downloadCmd.Flags().BoolVar(&continueOnErr, "continue-on-error", false, "Continue downloading after errors (default)")
+	downloadCmd.MarkFlagsMutuallyExclusive("force", "skip-existing")
 	downloadCmd.MarkFlagsMutuallyExclusive("fail-fast", "continue-on-error")
 	downloadCmd.MarkFlagRequired("url")
 }
@@ -508,6 +529,100 @@ func writeFailedURLs(outputFolder string, urls []string) (string, error) {
 	}
 
 	return path, nil
+}
+
+func entriesToURLs(entries []lib.SitemapEntry) []string {
+	urls := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		urls = append(urls, entry.URL)
+	}
+	return urls
+}
+
+func entriesToLastMod(entries []lib.SitemapEntry) map[string]string {
+	lastModByURL := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		if entry.URL == "" {
+			continue
+		}
+		lastModByURL[entry.URL] = entry.LastMod
+	}
+	return lastModByURL
+}
+
+func filterEntriesForDownload(entries []lib.SitemapEntry, outputFolder string, format string, manifest *lib.Manifest, refreshUpdated bool) ([]lib.SitemapEntry, int, int, error) {
+	var firstErr error
+	slugIndex, err := indexExistingSlugs(outputFolder, format)
+	if err != nil {
+		firstErr = err
+		slugIndex = map[string]struct{}{}
+	}
+
+	filtered := make([]lib.SitemapEntry, 0, len(entries))
+	skipped := 0
+	refreshed := 0
+
+	for _, entry := range entries {
+		if manifest != nil {
+			if manifestEntry, ok := manifest.Entries[entry.URL]; ok {
+				if manifestEntry.Format == "" || manifestEntry.Format == format {
+					if manifestEntryExists(manifestEntry, outputFolder) {
+						if refreshUpdated && isEntryUpdated(manifestEntry, entry.LastMod) {
+							filtered = append(filtered, entry)
+							refreshed++
+							continue
+						}
+						skipped++
+						continue
+					}
+				}
+			}
+		}
+
+		slug := extractSlug(entry.URL)
+		if _, exists := slugIndex[slug]; exists {
+			skipped++
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+
+	return filtered, skipped, refreshed, firstErr
+}
+
+func manifestEntryExists(entry lib.ManifestEntry, outputFolder string) bool {
+	entryPath := filepath.FromSlash(entry.FilePath)
+	if entryPath == "" {
+		return false
+	}
+	if !filepath.IsAbs(entryPath) {
+		entryPath = filepath.Join(outputFolder, entryPath)
+	}
+	if _, err := os.Stat(entryPath); err == nil {
+		return true
+	}
+	return false
+}
+
+func isEntryUpdated(entry lib.ManifestEntry, lastMod string) bool {
+	lastModified, ok := parseDateInput(lastMod)
+	if !ok {
+		return false
+	}
+
+	if entry.LastModified != "" {
+		if previous, ok := parseDateInput(entry.LastModified); ok {
+			return lastModified.After(previous)
+		}
+	}
+
+	if entry.DownloadedAt != "" {
+		if previous, ok := parseDateInput(entry.DownloadedAt); ok {
+			return lastModified.After(previous)
+		}
+	}
+
+	return false
 }
 
 func convertDateTime(datetime string) string {

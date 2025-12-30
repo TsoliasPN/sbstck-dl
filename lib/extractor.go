@@ -375,7 +375,26 @@ func (e *Extractor) ExtractPost(ctx context.Context, pageUrl string) (Post, erro
 
 type DateFilterFunc func(string) bool
 
+type SitemapEntry struct {
+	URL     string
+	LastMod string
+}
+
 func (e *Extractor) GetAllPostsURLs(ctx context.Context, pubUrl string, f DateFilterFunc) ([]string, error) {
+	entries, err := e.GetAllPostsEntries(ctx, pubUrl, f)
+	if err != nil {
+		return nil, err
+	}
+
+	urls := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		urls = append(urls, entry.URL)
+	}
+
+	return urls, nil
+}
+
+func (e *Extractor) GetAllPostsEntries(ctx context.Context, pubUrl string, f DateFilterFunc) ([]SitemapEntry, error) {
 	u, err := url.Parse(pubUrl)
 	if err != nil {
 		return nil, err
@@ -401,7 +420,7 @@ func (e *Extractor) GetAllPostsURLs(ctx context.Context, pubUrl string, f DateFi
 
 	// Pre-allocate a reasonable size for URLs
 	// This avoids multiple slice reallocations as we append
-	urls := make([]string, 0, 100)
+	entries := make([]SitemapEntry, 0, 100)
 
 	doc.Find("url").EachWithBreak(func(i int, s *goquery.Selection) bool {
 		// Check if the context has been cancelled
@@ -412,24 +431,24 @@ func (e *Extractor) GetAllPostsURLs(ctx context.Context, pubUrl string, f DateFi
 		}
 
 		urlSel := s.Find("loc")
-		url := urlSel.Text()
-		if !strings.Contains(url, "/p/") {
+		loc := urlSel.Text()
+		if !strings.Contains(loc, "/p/") {
 			return true
 		}
 
 		// Only find lastmod if we have a filter
+		lastmod := s.Find("lastmod").Text()
 		if f != nil {
-			lastmod := s.Find("lastmod").Text()
 			if !f(lastmod) {
 				return true
 			}
 		}
 
-		urls = append(urls, url)
+		entries = append(entries, SitemapEntry{URL: loc, LastMod: lastmod})
 		return true
 	})
 
-	return urls, nil
+	return entries, nil
 }
 
 type ExtractResult struct {

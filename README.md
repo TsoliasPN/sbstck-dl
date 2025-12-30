@@ -59,6 +59,7 @@ When downloading the full archive, if the downloader is interrupted, at the next
 A `manifest.json` file is written in the output directory with canonical URLs, local paths, download times, and content hashes.
 On reruns, URLs already recorded in the manifest (with matching format and existing file) are skipped.
 If any posts fail to download, a `failed-urls.txt` file is written in the output directory for retrying later.
+Use `--refresh-updated` to re-download posts when the sitemap `lastmod` is newer than the manifest.
 
 ```bash
 Usage:
@@ -73,11 +74,14 @@ Flags:
   -d, --dry-run                Enable dry run
       --file-extensions string Comma-separated list of file extensions to download (e.g., 'pdf,docx,txt'). If empty, downloads all file types
       --files-dir string       Directory name for downloaded file attachments (default "files")
+      --force                 Redownload posts even if they already exist
   -f, --format string          Specify the output format (options: "html", "md", "txt" (default "html")
   -h, --help                   help for download
       --image-quality string   Image quality to download (options: "high", "medium", "low") (default "high")
       --images-dir string      Directory name for downloaded images (default "images")
   -o, --output string          Specify the download directory (default ".")
+      --refresh-updated        Refresh posts when sitemap lastmod is newer than the manifest
+      --skip-existing          Skip existing posts (default for archive downloads)
       --continue-on-error      Continue downloading after errors (default)
   -u, --url string             Specify the Substack url
 
@@ -312,9 +316,9 @@ sbstck-dl download --url https://example.substack.com --cookie_name substack.sid
 - [x] (P1) Add `--fail-fast` / `--continue-on-error` behavior switches
 
 #### P1 — Incremental controls & updates
-- [ ] (P1) Add `--force` / `--skip-existing` switches (redownload/overwrite vs incremental)
-- [ ] (P1) Detect updated posts (e.g. compare sitemap `lastmod` or content hash) and optionally refresh local copies
-- [ ] (P1) Improve resume behavior across format/layout changes (based on manifest, not only slug matching)
+- [x] (P1) Add `--force` / `--skip-existing` switches (redownload/overwrite vs incremental)
+- [x] (P1) Detect updated posts (e.g. compare sitemap `lastmod` or content hash) and optionally refresh local copies
+- [x] (P1) Improve resume behavior across format/layout changes (based on manifest, not only slug matching)
 
 #### P1 — Private newsletters (auth + safety)
 - [ ] (P1) Support reading cookie value from an env var (avoid shell history)

@@ -354,6 +354,26 @@ Security notes:
 sbstck-dl download --url https://example.substack.com --cookie_name substack.sid --cookie_val COOKIE_VALUE
 ```
 
+### Recommended recipes
+
+Full archive with assets + indexes:
+
+```bash
+sbstck-dl download --url https://example.substack.com --output archive --format html --download-images --download-files --create-archive --layout year/month --write-metadata
+```
+
+Incremental updates (skip existing, refresh newer posts):
+
+```bash
+sbstck-dl download --url https://example.substack.com --output archive --format html --skip-existing --refresh-updated --create-archive
+```
+
+Private newsletter via keychain + incremental sync:
+
+```bash
+sbstck-dl download --url https://example.substack.com --output archive --format html --cookie_name substack.sid --cookie-keychain my-substack-cookie --skip-existing
+```
+
 ### Regenerating the archive index
 
 ```bash
@@ -497,7 +517,7 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 #### P2 - Config, CLI & docs
 - [x] (P2) Load options from a config file (e.g. `--config config.yaml`) and merge with CLI flags
 - [x] (P2) Expand the "Private Newsletters" docs with a step-by-step cookie retrieval + security notes
-- [ ] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)
+- [x] (P2) Add a "recommended recipes" section (full archive + assets + index + incremental updates)
 - [ ] (P2) Add `list --json` output; optionally add a metadata mode that also fetches title/date (rate-limited)
 
 ### Completed

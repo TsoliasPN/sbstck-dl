@@ -48,6 +48,7 @@ type Fetcher struct {
 	BackoffCfg  backoff.BackOff
 	Cookie      *http.Cookie
 	MaxWorkers  int
+	OnRetry     func(RetryInfo)
 }
 
 // FetcherOptions holds configurable options for Fetcher.
@@ -59,10 +60,18 @@ type FetcherOptions struct {
 	Cookie        *http.Cookie
 	Timeout       time.Duration
 	MaxWorkers    int
+	OnRetry       func(RetryInfo)
 }
 
 // FetcherOption defines a function that applies a specific option to FetcherOptions.
 type FetcherOption func(*FetcherOptions)
+
+// RetryInfo describes a retry attempt for a URL fetch.
+type RetryInfo struct {
+	URL   string
+	Count int
+	Wait  time.Duration
+}
 
 // WithRatePerSecond sets the rate per second for the Fetcher.
 func WithRatePerSecond(rate int) FetcherOption {
@@ -112,6 +121,13 @@ func WithTimeout(timeout time.Duration) FetcherOption {
 func WithMaxWorkers(workers int) FetcherOption {
 	return func(o *FetcherOptions) {
 		o.MaxWorkers = workers
+	}
+}
+
+// WithRetryObserver sets a callback invoked when a fetch is retried.
+func WithRetryObserver(observer func(RetryInfo)) FetcherOption {
+	return func(o *FetcherOptions) {
+		o.OnRetry = observer
 	}
 }
 
@@ -174,6 +190,7 @@ func NewFetcher(opts ...FetcherOption) *Fetcher {
 		BackoffCfg:  options.BackOffConfig,
 		Cookie:      options.Cookie,
 		MaxWorkers:  options.MaxWorkers,
+		OnRetry:     options.OnRetry,
 	}
 }
 
@@ -255,7 +272,13 @@ func (f *Fetcher) FetchURL(ctx context.Context, url string) (io.ReadCloser, erro
 		operation,
 		f.BackoffCfg,
 		func(err error, d time.Duration) {
-			// This could be connected to a logger
+			if f.OnRetry != nil {
+				f.OnRetry(RetryInfo{
+					URL:   url,
+					Count: retryCounter,
+					Wait:  d,
+				})
+			}
 			_ = err // Avoid unused variable error
 		},
 	)

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -31,6 +32,8 @@ var (
 	forceDownload  bool
 	skipExisting   bool
 	refreshUpdated bool
+	layout         string
+	writeMetadata  bool
 	failFast       bool
 	continueOnErr  bool
 	failedURLsFile = "failed-urls.txt"
@@ -48,6 +51,10 @@ var (
 			skipExistingMode := !forceDownload
 			if skipExisting {
 				skipExistingMode = true
+			}
+			layout = normalizeLayout(layout)
+			if !isValidLayout(layout) {
+				log.Fatalf("invalid --layout %q (use flat, year/month, or year/slug)", layout)
 			}
 			failedURLs := make([]string, 0)
 			failedURLSet := make(map[string]struct{})
@@ -110,6 +117,7 @@ var (
 				"format":  format,
 				"output":  outputFolder,
 				"dry_run": dryRun,
+				"layout":  layout,
 			})
 
 			manifestPath := filepath.Join(outputFolder, lib.ManifestFilename)
@@ -208,7 +216,7 @@ var (
 					fmt.Printf("Downloaded post %s in %s\n", downloadUrl, downloadTime)
 				}
 
-				path := makePath(post, outputFolder, format)
+				path := makePath(post, outputFolder, format, layout)
 				if verbose {
 					fmt.Printf("Writing post to file %s\n", path)
 				}
@@ -240,12 +248,16 @@ var (
 				}
 
 				if writeErr == nil {
+					downloadedAt := time.Now()
 					summary.Downloaded = 1
 					logEvent("download.completed", map[string]any{
 						"url":  post.CanonicalUrl,
 						"path": path,
 					})
-					updateManifest(post, path, time.Now(), "")
+					updateManifest(post, path, downloadedAt, "")
+					if writeMetadata {
+						writeMetadataSidecar(post, path, outputFolder, format, downloadedAt, "")
+					}
 				} else {
 					summary.Failed = 1
 					if post.CanonicalUrl != "" {
@@ -369,7 +381,7 @@ var (
 					}
 					post := result.Post
 
-					path := makePath(post, outputFolder, format)
+					path := makePath(post, outputFolder, format, layout)
 					if verbose {
 						fmt.Printf("Writing post to file %s\n", path)
 					}
@@ -401,12 +413,17 @@ var (
 					}
 
 					if writeErr == nil {
+						downloadedAt := time.Now()
 						summary.Downloaded++
 						logEvent("download.completed", map[string]any{
 							"url":  post.CanonicalUrl,
 							"path": path,
 						})
-						updateManifest(post, path, time.Now(), lastModByURL[result.Url])
+						lastModified := lastModByURL[result.Url]
+						updateManifest(post, path, downloadedAt, lastModified)
+						if writeMetadata {
+							writeMetadataSidecar(post, path, outputFolder, format, downloadedAt, lastModified)
+						}
 					} else {
 						summary.Failed++
 						if post.CanonicalUrl != "" {
@@ -487,6 +504,8 @@ func init() {
 	downloadCmd.Flags().BoolVar(&forceDownload, "force", false, "Redownload posts even if they already exist")
 	downloadCmd.Flags().BoolVar(&skipExisting, "skip-existing", false, "Skip existing posts (default for archive downloads)")
 	downloadCmd.Flags().BoolVar(&refreshUpdated, "refresh-updated", false, "Refresh posts when sitemap lastmod is newer than the manifest")
+	downloadCmd.Flags().StringVar(&layout, "layout", "flat", "Output layout (flat, year/month, year/slug)")
+	downloadCmd.Flags().BoolVar(&writeMetadata, "write-metadata", false, "Write a JSON sidecar with post metadata")
 	downloadCmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop the download on the first error")
 	downloadCmd.Flags().BoolVar(&continueOnErr, "continue-on-error", false, "Continue downloading after errors (default)")
 	downloadCmd.MarkFlagsMutuallyExclusive("force", "skip-existing")
@@ -529,6 +548,112 @@ func writeFailedURLs(outputFolder string, urls []string) (string, error) {
 	}
 
 	return path, nil
+}
+
+type postMetadata struct {
+	Title        string `json:"title"`
+	Subtitle     string `json:"subtitle,omitempty"`
+	Description  string `json:"description,omitempty"`
+	Slug         string `json:"slug"`
+	CanonicalURL string `json:"canonical_url"`
+	PostDate     string `json:"post_date"`
+	DownloadedAt string `json:"downloaded_at"`
+	WordCount    int    `json:"word_count,omitempty"`
+	CoverImage   string `json:"cover_image,omitempty"`
+	OutputPath   string `json:"output_path"`
+	Format       string `json:"format"`
+	LastModified string `json:"last_modified,omitempty"`
+}
+
+func writeMetadataSidecar(post lib.Post, outputPath string, outputFolder string, format string, downloadedAt time.Time, lastModified string) {
+	relPath := outputPath
+	if outputFolder != "" {
+		if rel, err := filepath.Rel(outputFolder, outputPath); err == nil {
+			relPath = filepath.ToSlash(rel)
+		}
+	}
+
+	meta := postMetadata{
+		Title:        post.Title,
+		Subtitle:     post.Subtitle,
+		Description:  post.Description,
+		Slug:         post.Slug,
+		CanonicalURL: post.CanonicalUrl,
+		PostDate:     post.PostDate,
+		DownloadedAt: downloadedAt.UTC().Format(time.RFC3339),
+		WordCount:    post.WordCount,
+		CoverImage:   post.CoverImage,
+		OutputPath:   relPath,
+		Format:       format,
+		LastModified: lastModified,
+	}
+
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		if logFormat == logFormatJSON {
+			logEvent("metadata.write_failed", map[string]any{
+				"path":  outputPath,
+				"error": err.Error(),
+			})
+		} else {
+			log.Printf("Error building metadata for %s: %v\n", outputPath, err)
+		}
+		return
+	}
+
+	path := sidecarPath(outputPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if logFormat == logFormatJSON {
+			logEvent("metadata.write_failed", map[string]any{
+				"path":  path,
+				"error": err.Error(),
+			})
+		} else {
+			log.Printf("Error creating metadata directory: %v\n", err)
+		}
+		return
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		if logFormat == logFormatJSON {
+			logEvent("metadata.write_failed", map[string]any{
+				"path":  path,
+				"error": err.Error(),
+			})
+		} else {
+			log.Printf("Error writing metadata file %s: %v\n", path, err)
+		}
+		return
+	}
+
+	logEvent("metadata.written", map[string]any{
+		"path": path,
+	})
+}
+
+func sidecarPath(outputPath string) string {
+	ext := filepath.Ext(outputPath)
+	if ext == "" {
+		return outputPath + ".json"
+	}
+	return strings.TrimSuffix(outputPath, ext) + ".json"
+}
+
+func normalizeLayout(value string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(value))
+	if trimmed == "" {
+		return "flat"
+	}
+	return trimmed
+}
+
+func isValidLayout(value string) bool {
+	switch value {
+	case "flat", "year/month", "year/slug":
+		return true
+	default:
+		return false
+	}
 }
 
 func entriesToURLs(entries []lib.SitemapEntry) []string {
@@ -641,6 +766,14 @@ func convertDateTime(datetime string) string {
 	return formattedDateTime
 }
 
+func postYearMonth(datetime string) (string, string) {
+	parsed, ok := parseDateInput(datetime)
+	if !ok {
+		return "unknown", "unknown"
+	}
+	return fmt.Sprintf("%04d", parsed.Year()), fmt.Sprintf("%02d", parsed.Month())
+}
+
 func parseURL(toTest string) (*url.URL, error) {
 	_, err := url.ParseRequestURI(toTest)
 	if err != nil {
@@ -655,8 +788,18 @@ func parseURL(toTest string) (*url.URL, error) {
 	return u, err
 }
 
-func makePath(post lib.Post, outputFolder string, format string) string {
-	return fmt.Sprintf("%s/%s_%s.%s", outputFolder, convertDateTime(post.PostDate), post.Slug, format)
+func makePath(post lib.Post, outputFolder string, format string, layout string) string {
+	filename := fmt.Sprintf("%s_%s.%s", convertDateTime(post.PostDate), post.Slug, format)
+	year, month := postYearMonth(post.PostDate)
+
+	switch layout {
+	case "year/month":
+		return filepath.Join(outputFolder, year, month, filename)
+	case "year/slug":
+		return filepath.Join(outputFolder, year, post.Slug, filename)
+	default:
+		return filepath.Join(outputFolder, filename)
+	}
 }
 
 // extractSlug extracts the slug from a Substack post URL
@@ -712,30 +855,36 @@ func filterExistingPosts(urls []string, outputFolder string, format string) ([]s
 }
 
 func indexExistingSlugs(outputFolder string, format string) (map[string]struct{}, error) {
-	entries, err := os.ReadDir(outputFolder)
-	if err != nil {
+	slugIndex := make(map[string]struct{})
+	ext := "." + format
+	if _, err := os.Stat(outputFolder); err != nil {
 		if os.IsNotExist(err) {
-			return map[string]struct{}{}, nil
+			return slugIndex, nil
 		}
 		return nil, err
 	}
 
-	slugIndex := make(map[string]struct{})
-	ext := "." + format
-	for _, entry := range entries {
+	err := filepath.WalkDir(outputFolder, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if entry.IsDir() {
-			continue
+			return nil
 		}
 		name := entry.Name()
 		if !strings.HasSuffix(name, ext) {
-			continue
+			return nil
 		}
 		base := strings.TrimSuffix(name, ext)
 		slug := slugFromFilename(base)
 		if slug == "" {
-			continue
+			return nil
 		}
 		slugIndex[slug] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return slugIndex, nil

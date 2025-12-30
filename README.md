@@ -62,6 +62,8 @@ A `manifest.json` file is written in the output directory with canonical URLs, l
 On reruns, URLs already recorded in the manifest (with matching format and existing file) are skipped.
 If any posts fail to download, a `failed-urls.txt` file is written in the output directory for retrying later.
 Use `--refresh-updated` to re-download posts when the sitemap `lastmod` is newer than the manifest.
+Use `--layout` to control how output files are organized (flat, year/month, year/slug).
+Use `--write-metadata` to write a JSON sidecar for each downloaded post.
 
 ```bash
 Usage:
@@ -81,7 +83,9 @@ Flags:
   -h, --help                   help for download
       --image-quality string   Image quality to download (options: "high", "medium", "low") (default "high")
       --images-dir string      Directory name for downloaded images (default "images")
+      --layout string          Output layout (flat, year/month, year/slug) (default "flat")
   -o, --output string          Specify the download directory (default ".")
+      --write-metadata         Write a JSON sidecar with post metadata
       --refresh-updated        Refresh posts when sitemap lastmod is newer than the manifest
       --skip-existing          Skip existing posts (default for archive downloads)
       --continue-on-error      Continue downloading after errors (default)
@@ -347,8 +351,8 @@ sbstck-dl download --url https://example.substack.com --cookie-jar path/to/cooki
 - [x] (P1) Support importing cookies from a Netscape cookie jar (optional)
 
 #### P2 - Output & archive UX
-- [ ] (P2) Add `--layout` for output structure (e.g. `flat` (current), `year/month`, `year/slug`)
-- [ ] (P2) Optionally write per-post metadata sidecar (e.g. `post.json`) or Markdown front matter
+- [x] (P2) Add `--layout` for output structure (e.g. `flat` (current), `year/month`, `year/slug`)
+- [x] (P2) Optionally write per-post metadata sidecar (e.g. `post.json`) or Markdown front matter
 - [ ] (P2) Add an `archive` command to regenerate `index.{format}` from existing downloads (no re-download)
 - [ ] (P2) Add optional filtering/sorting options for the archive page (e.g. by date range, newest/oldest)
 - [ ] (P2) Extract and index Notion links across posts into a separate `notion-links.{html,md}` (deduped + grouped by post)

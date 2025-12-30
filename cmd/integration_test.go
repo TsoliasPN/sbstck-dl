@@ -157,7 +157,7 @@ func TestCommandExecution(t *testing.T) {
 				}
 
 				// Write to file
-				filePath := makePath(post, outputFolder, format)
+				filePath := makePath(post, outputFolder, format, "flat")
 				err = post.WriteToFile(filePath, format, addSourceURL)
 				if err != nil {
 					t.Fatalf("Failed to write file: %v", err)
@@ -222,6 +222,8 @@ func TestCommandFlags(t *testing.T) {
 		assert.NotNil(t, cmd.Flags().Lookup("force"))
 		assert.NotNil(t, cmd.Flags().Lookup("skip-existing"))
 		assert.NotNil(t, cmd.Flags().Lookup("refresh-updated"))
+		assert.NotNil(t, cmd.Flags().Lookup("layout"))
+		assert.NotNil(t, cmd.Flags().Lookup("write-metadata"))
 		assert.NotNil(t, cmd.Flags().Lookup("fail-fast"))
 		assert.NotNil(t, cmd.Flags().Lookup("continue-on-error"))
 

@@ -12,11 +12,17 @@ on:
 jobs:
   test:
     name: Run Tests
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         go-version: [1.24.1]
+        include:
+          - os: ubuntu-latest
+            runner: ${{ fromJSON(vars.CI_RUNNER_JSON || '["ubuntu-latest"]') }}
+          - os: macos-latest
+            runner: ${{ fromJSON(vars.CI_RUNNER_MAC_JSON || '["macos-latest"]') }}
+          - os: windows-latest
+            runner: ${{ fromJSON(vars.CI_RUNNER_WIN_JSON || '["windows-latest"]') }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -35,7 +41,7 @@ jobs:
     name: Build
     needs: test
     if: success()
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -46,16 +52,19 @@ jobs:
             goarch: amd64
             name: ubuntu
             extension: ""
+            runner: ${{ fromJSON(vars.CI_RUNNER_JSON || '["ubuntu-latest"]') }}
           - os: macos-latest
             goos: darwin
             goarch: amd64
             name: mac
             extension: ""
+            runner: ${{ fromJSON(vars.CI_RUNNER_MAC_JSON || '["macos-latest"]') }}
           - os: windows-latest
             goos: windows
             goarch: amd64
             name: win
             extension: ".exe"
+            runner: ${{ fromJSON(vars.CI_RUNNER_WIN_JSON || '["windows-latest"]') }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -81,7 +90,7 @@ jobs:
     name: Attach Artifacts to Release
     if: github.event_name == 'release'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_JSON || '["ubuntu-latest"]') }}
     permissions:
       contents: write  # This is needed for release uploads
     steps:
